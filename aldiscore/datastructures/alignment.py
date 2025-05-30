@@ -76,6 +76,3 @@ class Alignment:
             ungapped_records.append(rec)
         dataset = Dataset(ungapped_records, self.data_type, self._sorted)
         return dataset
-
-    def get_shape(self):
-        return

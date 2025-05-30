@@ -24,9 +24,9 @@ def _compare_ungapped_rows(idx_a, idx_b, records):
     return len_record_a - len_record_b
 
 
-def _compare_ids(idx_a, idx_b, msa):
-    ords_a = [ord(char) for char in msa[idx_a].id]
-    ords_b = [ord(char) for char in msa[idx_b].id]
+def _compare_ids(idx_a, idx_b, records):
+    ords_a = [ord(char) for char in records[idx_a].id]
+    ords_b = [ord(char) for char in records[idx_b].id]
     for ord_a, ord_b in zip(ords_a, ords_b):
         if ord_a != ord_b:
             return ord_a - ord_b
@@ -37,7 +37,7 @@ def _compare_ids(idx_a, idx_b, msa):
 
 
 def argsort_seq_order(records: list[SeqRecord] | MultipleSeqAlignment):
-    use_ids = len(set([record.id for record in records])) < len(records)
+    use_ids = len(set([record.id for record in records])) == len(records)
     if use_ids:
         sorting_func = _compare_ids
     else:
@@ -99,7 +99,6 @@ def get_unique_key(records: list[SeqRecord] | MultipleSeqAlignment):
         ids_immutable = tuple(sorted(list(ids)))
         key = hash(ids_immutable)
     else:
-        # sort_idxs = argsort_seq_order(records)
-        key_str = "#".join(records)
+        key_str = "#".join(str(map(lambda record: str(record.seq), records)))
         key = hash(key_str)
     return key
