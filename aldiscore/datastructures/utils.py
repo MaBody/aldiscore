@@ -1,9 +1,9 @@
-from Bio.SeqRecord import SeqRecord
-from Bio.Align import MultipleSeqAlignment
 import functools
 import pandas as pd
-from enums.enums import DataTypeEnum
-from constants.constants import DNA_CHARS, AA_CHARS, GAP_CHAR
+from Bio.SeqRecord import SeqRecord
+from Bio.Align import MultipleSeqAlignment
+from aldiscore.enums.enums import DataTypeEnum
+from aldiscore.constants.constants import DNA_CHARS, AA_CHARS, GAP_CHAR
 
 
 def _compare_ungapped_rows(idx_a, idx_b, records):
@@ -44,7 +44,7 @@ def argsort_seq_order(records: list[SeqRecord] | MultipleSeqAlignment):
         sorting_func = _compare_ungapped_rows
     return sorted(
         range(len(records)),
-        key=functools.cmp_to_key(functools.partial(sorting_func, msa=records)),
+        key=functools.cmp_to_key(functools.partial(sorting_func, records=records)),
     )
 
 

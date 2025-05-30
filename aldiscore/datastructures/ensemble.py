@@ -1,9 +1,5 @@
-import pathlib
-from Bio import SeqIO
-from datastructures.alignment import Alignment
-from datastructures.dataset import Dataset
-import datastructures.utils
-from enums.enums import DataTypeEnum
+from aldiscore.datastructures.alignment import Alignment
+from aldiscore.datastructures.dataset import Dataset
 
 
 class Ensemble:

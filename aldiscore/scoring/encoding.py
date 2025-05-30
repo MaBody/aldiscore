@@ -1,7 +1,7 @@
-from enums.enums import PositionalEncodingEnum
 import numpy as np
 import pandas as pd
-from constants.constants import GAP_CHAR, GAP_CONST
+from aldiscore.enums.enums import PositionalEncodingEnum
+from aldiscore.constants.constants import GAP_CHAR, GAP_CONST
 
 
 def gapped_index_mapping(A: np.ndarray, dtype: np.dtype = np.int32):

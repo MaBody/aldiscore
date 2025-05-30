@@ -1,11 +1,6 @@
-import pathlib
-from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
-from Bio.Seq import Seq
-from Bio.Align import MultipleSeqAlignment
-import datastructures.utils
-import numpy as np
-from enums.enums import DataTypeEnum
+from aldiscore.datastructures import utils
+from aldiscore.enums.enums import DataTypeEnum
 
 
 class Dataset:
@@ -36,14 +31,14 @@ class Dataset:
         # Apply stable sorting to the sequences
         self._sorted = sort_sequences
         if sort_sequences:
-            self._sort_idxs = datastructures.utils.argsort_seq_order(records)
+            self._sort_idxs = utils.argsort_seq_order(records)
             self.records = [records[idx] for idx in self._sort_idxs]
         else:
             self.records = records
 
         # If data_type is not provided, infer via heuristic
         if data_type is None:
-            data_type = datastructures.utils.infer_data_type(self.records)
+            data_type = utils.infer_data_type(self.records)
         self.data_type = data_type
 
-        self._sequence_lengths = [len(seq.seq) for seq in self.sequences]
+        self._sequence_lengths = [len(seq.seq) for seq in self.records]

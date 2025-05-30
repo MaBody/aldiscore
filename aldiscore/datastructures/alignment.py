@@ -1,11 +1,11 @@
 import pathlib
-import datastructures.utils
 from Bio.Align import MultipleSeqAlignment
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from enums.enums import DataTypeEnum
-from datastructures.dataset import Dataset
-from constants.constants import GAP_CHAR
+from aldiscore.enums.enums import DataTypeEnum
+from aldiscore.datastructures.dataset import Dataset
+from aldiscore.constants.constants import GAP_CHAR
+from aldiscore.datastructures import utils
 
 
 class Alignment:
@@ -43,30 +43,39 @@ class Alignment:
         # Applies a stable sorting to the sequences
         self._sorted = sort_sequences
         if sort_sequences:
-            self._sort_idxs = datastructures.utils.argsort_seq_order(msa)
+            self._sort_idxs = utils.argsort_seq_order(msa)
             self.msa = MultipleSeqAlignment([msa[idx] for idx in self._sort_idxs])
         else:
             self.msa = msa
 
         # If data_type is not provided, infer via heuristic
         if data_type is None:
-            data_type = datastructures.utils.infer_data_type(self.msa)
+            data_type = utils.infer_data_type(self.msa)
         self.data_type = data_type
 
         # Compute a unique key for the alignment (used in caching intermediate results)
-        self.key = datastructures.utils.get_unique_key(msa)
+        self.key = utils.get_unique_key(msa)
 
-    def save_ungapped_fasta(self, out_file: pathlib.Path):
+        # Set shape attribute for convience
+        self.shape = (len(self.msa), self.msa.get_alignment_length())
+
+    def save_to_fasta(self, out_file: pathlib.Path, no_gaps: bool = False):
         with open(out_file, "w") as outfile:
             for sequence in self.msa:
                 outfile.write(f">{sequence.id}\n")
-                outfile.write(str(sequence.seq).replace(GAP_CHAR, ""))
+                if no_gaps:
+                    outfile.write(str(sequence.seq).replace(GAP_CHAR, ""))
+                else:
+                    outfile.write(str(sequence.seq))
                 outfile.write("\n")
 
     def get_dataset(self):
         ungapped_records = []
         for record in self.msa:
-            SeqRecord(Seq(str(record.seq).replace(GAP_CHAR, "")), id=record.id)
-            ungapped_records.append(record)
+            rec = SeqRecord(Seq(str(record.seq).replace(GAP_CHAR, "")), id=record.id)
+            ungapped_records.append(rec)
         dataset = Dataset(ungapped_records, self.data_type, self._sorted)
         return dataset
+
+    def get_shape(self):
+        return

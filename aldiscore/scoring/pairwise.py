@@ -1,9 +1,9 @@
-from datastructures.alignment import Alignment
 import numpy as np
-from enums.enums import FeatureEnum as FE, PositionalEncodingEnum
 from abc import ABC
-import scoring.encoding
-from constants.constants import GAP_CONST
+from aldiscore.scoring import encoding
+from aldiscore.datastructures.alignment import Alignment
+from aldiscore.constants.constants import GAP_CONST
+from aldiscore.enums.enums import FeatureEnum as FE, PositionalEncodingEnum
 
 # from features.encoding import encode_positions, gapped_index_mapping
 from constants.constants import GAP_CHAR
@@ -47,8 +47,8 @@ class Metric(ABC):
         key_x=None,
         key_y=None,
     ):
-        self._key_x = alignment_x.msa_file if key_x is None else key_x
-        self._key_y = alignment_y.msa_file if key_y is None else key_y
+        self._key_x = alignment_x.key if key_x is None else key_x
+        self._key_y = alignment_y.key if key_y is None else key_y
         self._alignment_map = {self._key_x: alignment_x, self._key_y: alignment_y}
 
     def _get_standard_input(self, key):
@@ -169,10 +169,8 @@ class DisplacementDistance(Metric):
         self._weights = np.array(weights)
         self._cache = cache
 
-    def compute(
-        self, alignment_x: Alignment, alignment_y: Alignment, key_x=None, key_y=None
-    ):
-        self._init_key_map(alignment_x, alignment_y, key_x, key_y)
+    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
+        self._init_key_map(alignment_x, alignment_y)
         return self._avg_displacement()
 
     def _avg_displacement(self):
