@@ -1,25 +1,15 @@
 import pathlib
 import subprocess
 import tempfile
-from collections import defaultdict
 from typing import Optional
 import itertools
 import numpy as np
 from numpy import typing as npt
 from scipy.fft import dct
 import pandas as pd
-from enums.enums import DataTypeEnum
-
-DNA_CHARS = "N-ACGT"  # Include N for safety
-DNA_CHAR_MAP = defaultdict(lambda: 0, {"A": 63, "C": 127, "G": 191, "T": 255})
-AA_CHARS = [char for char in "-ACDEFGHIKLMNOPQRSTUVWY"]
-# Creating 23 numbers from 0 to 255 with maximal spacing
-AA_MAPPING = np.arange(len(AA_CHARS)) / (len(AA_CHARS) - 1) * 255
-# Round to intergers (spacing of 11 or 12)
-AA_MAPPING = np.round(AA_MAPPING, decimals=0).astype(int)
-AA_CHAR_MAP = defaultdict(
-    lambda: 0, {char: mapping for char, mapping in zip(AA_CHARS, AA_MAPPING)}
-)
+from aldiscore.datastructures.ensemble import Ensemble
+from aldiscore.enums.enums import DataTypeEnum
+from aldiscore.constants.constants import DNA_CHAR_MAP, AA_CHAR_MAP
 
 
 def run_cmd(
@@ -194,7 +184,7 @@ def normalized_hamming_dist(hash1: str, hash2: str) -> float:
     return absolute_hamming_dist(hash1, hash2) / len(hash1)
 
 
-def format_dist_mat(dists: list, ensemble):
+def format_dist_mat(dists: list, ensemble: Ensemble, labels: list = None):
     """
     Reconstructs the distance matrix based on a list of pairwise distances.
 
@@ -210,46 +200,32 @@ def format_dist_mat(dists: list, ensemble):
     - dist_mat: pd.DataFrame
         Symmetric distance matrix.
     """
-    n_alignments = len(ensemble.ensemble)
+    n_alignments = len(ensemble.alignments)
     dist_mat = np.zeros((n_alignments, n_alignments), dtype=np.float32)
     # Puzzling together the distance matrix
-    tool_names = [""] * n_alignments
     mat_idxs = range(n_alignments)
     for list_idx, (idx_x, idx_y) in enumerate(itertools.combinations(mat_idxs, r=2)):
         # Convert the flat list of distances back to a distance matrix
         # This works because of the stability of itertools.combinations
         dist = dists[list_idx]
         dist_mat[idx_x, idx_y] = dist
-        # Store the name of the aligner that produced the MSA
-        tool_names[idx_x] = ensemble.ensemble[idx_x].tool
-        tool_names[idx_y] = ensemble.ensemble[idx_y].tool
     # Copy symmetric values, diagonal is always zero
     dist_mat = dist_mat + dist_mat.T
     # Convert to df, name rows/cols with associated aligner
-    col_names = [name + "_" + str(idx) for name, idx in zip(tool_names, mat_idxs)]
-    dist_mat = pd.DataFrame(dist_mat, index=tool_names, columns=col_names)
+    dist_mat = pd.DataFrame(dist_mat, index=labels, columns=labels)
     return dist_mat
 
 
-def compute_custom_metrics(idxs: tuple, ensemble=None, metrics=None):
+def compute_custom_metrics(
+    idxs: tuple, ensemble: Ensemble = None, metrics: dict[str] = None
+):
     idx_x, idx_y = idxs
     dist_dict = {}
     for name, metric in metrics.items():
         dist = metric.compute(
-            ensemble.ensemble[idx_x],
-            ensemble.ensemble[idx_y],
+            ensemble.alignments[idx_x],
+            ensemble.alignments[idx_y],
         )
         # print(f"{name} : {time()- start}s")
         dist_dict[name] = dist
     return dist_dict
-
-
-DATA_TYPE_MAP = {DataTypeEnum.DNA: DataType.DNA, DataTypeEnum.AA: DataType.AA}
-DATA_TYPE_MAP.update(dict(zip(DATA_TYPE_MAP.values(), DATA_TYPE_MAP.keys())))
-
-
-def convert_data_type_enum(data_type: DataType | DataTypeEnum):
-    if data_type in DATA_TYPE_MAP:
-        return DATA_TYPE_MAP[data_type]
-    else:
-        raise ValueError(f"Did not recognize data_type = {data_type}")

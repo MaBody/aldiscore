@@ -4,9 +4,8 @@ from aldiscore.scoring import encoding
 from aldiscore.datastructures.alignment import Alignment
 from aldiscore.constants.constants import GAP_CONST
 from aldiscore.enums.enums import FeatureEnum as FE, PositionalEncodingEnum
-
-# from features.encoding import encode_positions, gapped_index_mapping
-from constants.constants import GAP_CHAR
+from aldiscore.scoring import utils
+from aldiscore.constants.constants import GAP_CHAR
 
 
 class Metric(ABC):
@@ -53,7 +52,7 @@ class Metric(ABC):
 
     def _get_standard_input(self, key):
         S = np.array(self._alignment_map[key].msa)
-        Q = scoring.encoding.gapped_index_mapping(S, self._dtype)
+        Q = encoding.gapped_index_mapping(S, self._dtype)
 
         # These are overwritten for convenience, but do not change
         self._K = len(S)
@@ -88,13 +87,13 @@ class Metric(ABC):
 
 
 class HomologySetMetric(Metric):
-    def _avg_jaccard_coef(self, encoding: PositionalEncodingEnum):
+    def _avg_jaccard_coef(self, encoding_enum: PositionalEncodingEnum):
         # Used for d_SSP
 
         def from_scratch(key):
             S, Q = self._get_standard_input(key)
-            A_code = scoring.encoding.encode_positions(
-                S, self._L_max, encoding, int_dtype=self._dtype
+            A_code = encoding.encode_positions(
+                S, self._L_max, encoding_enum, int_dtype=self._dtype
             )
             hcols_list, gap_mask_list = [], []
             for k in range(self._K):
@@ -125,13 +124,13 @@ class HomologySetMetric(Metric):
         dist = 1 - np.sum(intersects) / np.sum(unions)
         return dist
 
-    def _avg_hamming_dist(self, encoding: PositionalEncodingEnum):
+    def _avg_hamming_dist(self, encoding_enum: PositionalEncodingEnum):
         # Used for d_seq, d_pos
 
         def from_scratch(key):
             S, Q = self._get_standard_input(key)
-            A_code = scoring.encoding.encode_positions(
-                S, self._L_max, encoding, int_dtype=self._dtype
+            A_code = encoding.encode_positions(
+                S, self._L_max, encoding_enum, int_dtype=self._dtype
             )
             hcols_list = []
             for k in range(self._K):
@@ -152,102 +151,6 @@ class HomologySetMetric(Metric):
 
 
 # # # # # Subclasses # # # # #
-
-
-class DisplacementDistance(Metric):
-    enum = FE.DISPLACEMENT_DIST
-
-    def __init__(
-        self,
-        thresholds: list = [0, 1, 2, 4, 8, 16, 32],
-        weights: list = [1, 1, 1, 1, 1, 1, 1],
-        suffix: str = "",
-        cache: dict = None,
-    ):
-        self.name = str(self.enum) + suffix
-        self._thresholds = np.array(thresholds)
-        self._weights = np.array(weights)
-        self._cache = cache
-
-    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
-        self._init_key_map(alignment_x, alignment_y)
-        return self._avg_displacement()
-
-    def _avg_displacement(self):
-        def from_scratch(key):
-            _, Q = self._get_standard_input(key)
-            return Q
-
-        Q_x = self._get_from_cache(self._key_x, from_scratch)
-        Q_y = self._get_from_cache(self._key_y, from_scratch)
-
-        site_vals = []
-        norm_weights = self._weights / np.sum(self._weights)
-        for k in range(len(Q_x)):
-            abs_gapped_dists = np.abs(Q_x[k] - Q_y[k])[:, np.newaxis]
-            # Aggregate distances by weighting + normalizing
-            seq_displacement = (abs_gapped_dists > self._thresholds).dot(norm_weights)
-            site_vals.append(seq_displacement)
-        dist = np.mean(np.concatenate(site_vals))
-        return dist
-
-
-class GapDeltaDistance(Metric):
-    enum = FE.GAP_DELTA_DISTANCE
-
-    def __init__(
-        self,
-        cache: dict = None,
-    ):
-        self.name = str(self.enum)
-        self._cache = cache
-
-    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
-        self._init_key_map(alignment_x, alignment_y)
-        return self._avg_shift_delta()
-
-    def _avg_shift_delta(self):
-
-        def from_scratch(key):
-            S, Q = self._get_standard_input(key)
-            # A_code contains: 0, if not a gap, else the length of the associated gap region
-            A_code = scoring.encoding.encode_positions(
-                S,
-                self._L_max,
-                PositionalEncodingEnum.GAP_REGIONS,
-                int_dtype=self._dtype,
-            )
-            # A_pred[i] contains the length of the gap region ending at index i-1
-            A_pred = np.roll(A_code, 1, axis=1)
-            A_pred[:, 0] = 0
-            # A_succ[i] contains the length of the gap region starting at index i+1
-            A_succ = np.roll(A_code, -1, axis=1)
-            A_succ[:, -1] = 0
-            A_pred_list, A_succ_list, num_gaps_list = [], [], []
-            for k in range(self._K):
-                A_pred_list.append(A_pred[k, Q[k]])
-                A_succ_list.append(A_succ[k, Q[k]])
-                num_gaps_list.append(len(A_code[k]) - len(Q[k]))
-            return A_pred_list, A_succ_list, num_gaps_list
-
-        A_x_pred_list, A_x_succ_list, num_gaps_x_list = self._get_from_cache(
-            self._key_x, from_scratch
-        )
-        A_y_pred_list, A_y_succ_list, num_gaps_y_list = self._get_from_cache(
-            self._key_y, from_scratch
-        )
-
-        numerators = []
-        denominators = []
-        for k in range(self._K):
-            # Compute the difference in the length of the preceding gap region
-            gap_deltas_pred = np.sum(np.abs(A_x_pred_list[k] - A_y_pred_list[k]))
-            # Compute the difference in the length of the succeding gap region
-            gap_deltas_succ = np.sum(np.abs(A_x_succ_list[k] - A_y_succ_list[k]))
-            numerators.append(gap_deltas_pred + gap_deltas_succ)
-            denominators.append(2 * (num_gaps_x_list[k] + num_gaps_y_list[k]))
-        dist = np.sum(numerators) / np.sum(denominators)
-        return dist
 
 
 class SSPDistance(HomologySetMetric):
@@ -281,7 +184,7 @@ class PerceptualHammingDistance(Metric):
     enum = FE.PERC_HASH_HAMMING
     name = None
 
-    def __init__(self, hash_size: int, cache: dict = None):
+    def __init__(self, hash_size: int = 16, cache: dict = None):
         self.name = self.enum + f"_{hash_size}bit"
         self._hash_size = hash_size
         self._cache = cache
@@ -291,7 +194,7 @@ class PerceptualHammingDistance(Metric):
 
         def from_scratch(key, max_len: int):
             A_pad = self._pad_msa(np.array(self._alignment_map[key].msa), max_len)
-            hash = features.utils.msa_perceptual_hash(
+            hash = utils.msa_perceptual_hash(
                 A_pad, self._alignment_map[key].data_type, self._hash_size
             )
             return hash
@@ -300,7 +203,7 @@ class PerceptualHammingDistance(Metric):
         hash_x = self._get_from_cache(self._key_x, from_scratch, max_len=max_len)
         hash_y = self._get_from_cache(self._key_y, from_scratch, max_len=max_len)
 
-        dist = features.utils.normalized_hamming_dist(hash_x, hash_y)
+        dist = utils.normalized_hamming_dist(hash_x, hash_y)
         return dist
 
     def _pad_msa(self, msa: np.ndarray, length: int) -> np.ndarray:
@@ -313,20 +216,8 @@ class PerceptualHammingDistance(Metric):
 
 
 _CUSTOM_METRICS: list[Metric] = [
-    # HomologyDisplacementDistance(),
     SSPDistance(),
     HomologySeqDistance(),
     HomologyPosDistance(),
-    # GapDeltaDistance(),
-    # DisplacementDistance(),
-    DisplacementDistance(thresholds=[0], weights=[1], suffix="_d0"),
-    DisplacementDistance(thresholds=[1], weights=[1], suffix="_d1"),
-    DisplacementDistance(thresholds=[2], weights=[1], suffix="_d2"),
-    DisplacementDistance(thresholds=[4], weights=[1], suffix="_d4"),
-    DisplacementDistance(thresholds=[8], weights=[1], suffix="_d8"),
-    DisplacementDistance(thresholds=[16], weights=[1], suffix="_d16"),
-    DisplacementDistance(thresholds=[32], weights=[1], suffix="_d32"),
     PerceptualHammingDistance(16),
-    PerceptualHammingDistance(64),
-    PerceptualHammingDistance(256),
 ]
