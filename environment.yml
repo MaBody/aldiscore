@@ -10,7 +10,6 @@ dependencies:
 - tqdm
 - scipy
 - pytest
-- dotenv
 # - notebook
 # - pypythia[version='=1.2.1']
 # - snakemake[version='>=8.9']
