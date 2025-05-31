@@ -23,20 +23,30 @@ The scores can be used as a proxy for the uncertainty/difficulty of the alignmen
 
 |Pairwise     | Description                                               |
 |--------------|-----------------------------------------------------------|
-|d_SSP  | Homology set metric. Ignores gaps.|
-|d_seq  | Homology set metric. Identical coding of gaps in sequence.|
-|d_pos  | Homology set metric. Identical coding of consecutive gaps.|
-|pHash  | Perceptual hashing of alignment matrix.|
+|$\text{d}_{\text{SSP}}$ [[1]](#1)  | Homology set metric. Ignores gaps.|
+|$\text{d}_{\text{seq}}$ [[1]](#1)  | Homology set metric. Identical coding of gaps in sequence.|
+|$\text{d}_{\text{pos}}$ [[1]](#1)  | Homology set metric. Identical coding of consecutive gaps.|
+|pHash [[2]](#2)  | Perceptual hashing of alignment matrix.|
 
 
 |Set-based     | Description                                               |
 |--------------|-----------------------------------------------------------|
-|Column Confidence  | Fraction of reproduced columns across ensemble.           |
-|ConfSet            | Number of unique entries per replication set.             |
-|ConfEntropy        | Shannon entropy per replication set.                      |
-|ConfDisplace       | Binned standard deviation of indices per replication set. |
+|$\text{Conf}_{Set}$       | Number of unique entries per replication set.             |
+|$\text{Conf}_{Entropy}$   | Shannon entropy per replication set.                      |
+|$\text{Conf}_{Displace}$  | Binned standard deviation of indices per replication set. |
 
 Our preferred method is the pairwise d_pos score.
 
 ## Demo 
 We recommend checking out [demo.ipynb](notebooks/demo.ipynb) for a quick and intuitive overview of the functionalities.
+
+## References
+<a id="1">[1]</a> 
+Blackburne, B. P., & Whelan, S. (2012). 
+Measuring the distance between multiple sequence alignments. 
+Bioinformatics, 28(4), 495-502.
+
+<a id="2">[2]</a> 
+Zauner, C. (2010). 
+Implementation and benchmarking of perceptual image hash functions.
+PhD Thesis
