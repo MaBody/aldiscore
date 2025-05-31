@@ -9,7 +9,4 @@ dependencies:
 - numpy
 - tqdm
 - scipy
-- pytest
-# - notebook
-# - pypythia[version='=1.2.1']
-# - snakemake[version='>=8.9']
+# - ipykernel
