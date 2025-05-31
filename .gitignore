@@ -8,6 +8,7 @@ settings.json
 results/
 trash/
 snake_*.smk
+.pytest_cache/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
