@@ -19,7 +19,7 @@ class _ConfusionScore(ABC):
         self._dtype = code_dtype
         self._verbose = verbose
 
-    def compute(self, ensemble: Ensemble):
+    def compute(self, ensemble: Ensemble) -> float | np.ndarray | list[np.ndarray]:
         self._compute_prerequisites(ensemble)
         self._compute_bespoke_arguments()
         return self._confusion()
@@ -45,7 +45,7 @@ class _ConfusionScore(ABC):
             A = np.array(ensemble.alignments[i].msa)
             self._Q_list.append(encoding.gapped_index_mapping(A, self._dtype))
             A_code = encoding.encode_positions(
-                A, self._L_max, PositionalEncodingEnum.POSITION, self._dtype
+                A, PositionalEncodingEnum.POSITION, self._dtype
             )
             self._A_code_list.append(A_code)
 
@@ -178,79 +178,3 @@ class ConfusionDisplace(_ConfusionScore):
         seq_confusion = seq_confusion.mean(axis=1)
 
         return seq_confusion
-
-
-# def confusion_score(
-#     ensemble: Ensemble,
-#     encoding: PositionalEncodingEnum,
-#     method: FeatureEnum = FeatureEnum.CONFUSION_ENTROPY,
-#     aggregate: Literal["site", "sequence", None] = None,
-#     normalize: bool = True,
-#     dtype: np.dtype = np.int32,
-#     verbose: bool = False,
-#     thresholds=[0, 1, 2, 4, 8, 16, 32],
-#     weights=[1, 1, 1, 1, 1, 1, 1],
-# ):
-#     """For each site, compute the number of different unique sites that replicates propose for each site of the homology set.
-#     Average over all sites in the homology set."""
-
-#     K = len(ensemble.dataset.sequences)
-#     I = len(ensemble.ensemble)
-#     N_k_list = ensemble.dataset._sequence_lengths.copy()
-#     L_max = max(N_k_list)
-#     N_max = max([msa.number_of_sites() for msa in ensemble.ensemble])
-#     A_code_list = []
-#     Q_list = []
-
-#     max_entropy = None
-#     if (method == FeatureEnum.CONFUSION_ENTROPY) and normalize:
-#         uniform = np.full(shape=I, fill_value=1 / I)
-#         max_entropy = -np.sum(uniform * np.log2(uniform))
-
-#     thresholds_ = None
-#     norm_weights = None
-#     if method == FeatureEnum.CONFUSION_DISPLACEMENT:
-#         thresholds_ = np.array(thresholds)
-#         norm_weights = np.array(weights) / np.sum(weights)
-
-#     for i in range(I):
-#         # Prepare encodings and mappings from unaligned to aligned index
-#         A = np.array(ensemble.ensemble[i].msa)
-#         Q_list.append(scoring.encoding.gapped_index_mapping(A, dtype))
-#         A_code = scoring.encoding.encode_positions(A, L_max, encoding, dtype)
-#         A_code_list.append(A_code)
-
-#     site_vals = []
-#     K_range = tqdm(list(range(K))) if verbose else range(K)
-#     for k in K_range:
-#         # For each k, hcols has dimensions (N_k, K, I)
-#         rcols = np.empty((N_k_list[k], K, I), dtype=dtype)
-#         for i in range(I):
-#             rcols[:, :, i] = A_code_list[i][:, Q_list[i][k]].T
-
-#         if method == FeatureEnum.CONFUSION_SET:
-#             # Collect the number of distinct homologous positions per site across all replicates
-#             seq_confusion = _seq_confusion_set(rcols, k, I, normalize)
-
-#         elif method == FeatureEnum.CONFUSION_ENTROPY:
-#             # Compute the entropy per site across all replicates
-#             seq_confusion = _seq_confusion_entropy(
-#                 rcols, K, k, N_k_list[k], I, max_entropy, normalize
-#             )
-#         elif method == FeatureEnum.CONFUSION_DISPLACEMENT:
-#             seq_confusion = _seq_confusion_displacement(
-#                 rcols, k, thresholds_, norm_weights
-#             )
-#         else:
-#             raise ValueError(f"Unkown scoring method '{method}'")
-
-#         site_vals.append(seq_confusion)
-#     if aggregate == "site":
-#         dist = np.mean(np.concatenate(site_vals))
-#     elif aggregate == "sequence":
-#         dist = np.array([np.mean(seq_dists) for seq_dists in site_vals])
-#     elif aggregate is None:
-#         return [seq_dists for seq_dists in site_vals]
-#     else:
-#         raise ValueError(f"Unknown strategy {aggregate}")
-#     return dist

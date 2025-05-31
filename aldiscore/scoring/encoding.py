@@ -16,7 +16,6 @@ def gapped_index_mapping(A: np.ndarray, dtype: np.dtype = np.int32):
 
 def encode_positions(
     A: np.ndarray,
-    L_max: int,
     encoding: PositionalEncodingEnum,
     int_dtype: np.dtype = np.int32,
 ):
@@ -33,6 +32,7 @@ def encode_positions(
         - "uniform"  --> encode all gaps with "-1"
         - "sequence" --> encode all gaps in the same sequence identically
         - "position" --> encode each gap region in a sequence with the index of site to the left
+        - "raw"      --> encode each char with its unicode number
         - "position_abs" --> encode each gap region in a sequence with its "gap-only" index (independent of the site indices)
 
     Example
@@ -50,6 +50,9 @@ def encode_positions(
       # position
       [[ 11,  12,  13, -13, -13,  14],
        [-20,  21, -21,  22,  23,  24]]
+      # raw
+      [[ 97,  98,  97,  -1,  -1,  99],
+       [ -1,  98,  -1,  98,  99,  98]]
       # gap_regions
       [[ 0,    0,   0,   2,   2,   0],
        [ 1,    0,   1,   0,   0,   0]]
@@ -57,8 +60,12 @@ def encode_positions(
     """
     site_codes = np.zeros(A.shape, dtype=int_dtype)
     gap_mask = A == GAP_CHAR
-    # The number of non-consecutive gap regions is bounded by 2 * max_seq_len
-    offset_magnitude = 10 ** np.ceil(np.log10(2 * L_max + 1))
+
+    L_max = (~gap_mask).sum(axis=1).max()
+    # The number of non-consecutive gap regions in a sequence is bounded by L_max + 1
+    # --> The smallest L_max + 1 positions are reserved for the position in the sequence
+    # --> All larger positions are used for the sequence index k
+    offset_magnitude = 10 ** (np.ceil(np.log10(L_max + 2)))
     seq_offsets = (offset_magnitude * np.arange(1, len(A) + 1)).astype(int_dtype)
     seq_offsets = seq_offsets[:, np.newaxis]
     site_encoding = (~gap_mask).cumsum(axis=1, dtype=int_dtype) + seq_offsets

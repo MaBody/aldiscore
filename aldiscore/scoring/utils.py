@@ -184,9 +184,9 @@ def normalized_hamming_dist(hash1: str, hash2: str) -> float:
     return absolute_hamming_dist(hash1, hash2) / len(hash1)
 
 
-def format_dist_mat(dists: list, ensemble: Ensemble, labels: list = None):
+def format_dist_mat(dists: list, ensemble: Ensemble):
     """
-    Reconstructs the distance matrix based on a list of pairwise distances.
+    Reconstructs the distance matrix from a list of pairwise similarity scores.
 
     Parameters
     ----------
@@ -212,7 +212,6 @@ def format_dist_mat(dists: list, ensemble: Ensemble, labels: list = None):
     # Copy symmetric values, diagonal is always zero
     dist_mat = dist_mat + dist_mat.T
     # Convert to df, name rows/cols with associated aligner
-    dist_mat = pd.DataFrame(dist_mat, index=labels, columns=labels)
     return dist_mat
 
 

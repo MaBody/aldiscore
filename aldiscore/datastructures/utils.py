@@ -1,4 +1,5 @@
 import functools
+import numpy as np
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
@@ -74,8 +75,8 @@ def infer_data_type(records: list[SeqRecord] | MultipleSeqAlignment):
     char_counts = pd.Series(list(ungapped)).value_counts()
     unique_chars = char_counts.index.to_series()
 
-    dna_included = DNA_CHARS.isin(unique_chars)
-    protein_included = AA_CHARS.isin(unique_chars)
+    dna_included = np.isin(DNA_CHARS, unique_chars)
+    protein_included = np.isin(AA_CHARS, unique_chars)
 
     protein_missing = AA_CHARS[~protein_included]
     missing_counts = pd.Series(0, index=protein_missing)
@@ -94,11 +95,6 @@ def infer_data_type(records: list[SeqRecord] | MultipleSeqAlignment):
 
 
 def get_unique_key(records: list[SeqRecord] | MultipleSeqAlignment):
-    ids = set([record.id for record in records])
-    if len(set(ids)) == len(records):
-        ids_immutable = tuple(sorted(list(ids)))
-        key = hash(ids_immutable)
-    else:
-        key_str = "#".join(str(map(lambda record: str(record.seq), records)))
-        key = hash(key_str)
+    key_str = "#".join(map(lambda record: str(record.seq), records))
+    key = hash(key_str)
     return key

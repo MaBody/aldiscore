@@ -1,14 +1,16 @@
+import itertools
 import numpy as np
 from abc import ABC
-from aldiscore.scoring import encoding
-from aldiscore.datastructures.alignment import Alignment
-from aldiscore.constants.constants import GAP_CONST
-from aldiscore.enums.enums import FeatureEnum as FE, PositionalEncodingEnum
 from aldiscore.scoring import utils
-from aldiscore.constants.constants import GAP_CHAR
+from aldiscore.scoring import encoding
+from aldiscore.enums.enums import FeatureEnum as FE, PositionalEncodingEnum
+from aldiscore.constants.constants import GAP_CONST, GAP_CHAR
+from aldiscore.datastructures.ensemble import Ensemble
+from aldiscore.datastructures.alignment import Alignment
+from typing import Literal
 
 
-class Metric(ABC):
+class _Metric(ABC):
     enum = None
     name = None
     _cache = None
@@ -19,9 +21,32 @@ class Metric(ABC):
 
     def compute(
         self,
+        ensemble: Ensemble,
+        cache: dict = {},
+        format: Literal["flat", "matrix"] = "flat",
+    ):
+        scores = []
+        self._cache = cache
+
+        index_pairs = list(itertools.combinations(range(len(ensemble.alignments)), r=2))
+        for idx_x, idx_y in index_pairs:
+            score = self.compute_similarity(
+                ensemble.alignments[idx_x],
+                ensemble.alignments[idx_y],
+            )
+            scores.append(score)
+
+        out = np.array(scores)
+        if format == "matrix":
+            out = utils.format_dist_mat(scores, ensemble)
+
+        return out
+
+    def compute_similarity(
+        self,
         alignment_x: Alignment,
         alignment_y: Alignment,
-    ):
+    ) -> float:
         """
         Computes the pairwise distances of alignments in the ensemble.
 
@@ -50,15 +75,13 @@ class Metric(ABC):
         self._key_y = alignment_y.key if key_y is None else key_y
         self._alignment_map = {self._key_x: alignment_x, self._key_y: alignment_y}
 
-    def _get_standard_input(self, key):
+    def _get_metric_prerequisites(self, key):
         S = np.array(self._alignment_map[key].msa)
         Q = encoding.gapped_index_mapping(S, self._dtype)
-
-        # These are overwritten for convenience, but do not change
-        self._K = len(S)
-        self._L_k_list = [len(arr) for arr in Q]
-        self._L_max = max(self._L_k_list)
-        return S, Q
+        K = len(S)
+        L_k_list = [len(arr) for arr in Q]
+        L_max = max(L_k_list)
+        return S, Q, K, L_k_list, L_max
 
     def _get_from_cache(self, key, compute_cachables: callable, **kwargs):
         use_cache = self._cache is not None
@@ -86,20 +109,18 @@ class Metric(ABC):
         )
 
 
-class HomologySetMetric(Metric):
+class _HomologySetMetric(_Metric):
     def _avg_jaccard_coef(self, encoding_enum: PositionalEncodingEnum):
         # Used for d_SSP
 
         def from_scratch(key):
-            S, Q = self._get_standard_input(key)
-            A_code = encoding.encode_positions(
-                S, self._L_max, encoding_enum, int_dtype=self._dtype
-            )
+            S, Q, K, L_k_list, L_max = self._get_metric_prerequisites(key)
+            A_code = encoding.encode_positions(S, encoding_enum, int_dtype=self._dtype)
             hcols_list, gap_mask_list = [], []
-            for k in range(self._K):
+            for k in range(K):
                 hcols_list.append(np.delete(A_code[:, Q[k]], k, axis=0))
                 gap_mask_list.append(hcols_list[-1] != GAP_CONST)
-            return (hcols_list, gap_mask_list)
+            return hcols_list, gap_mask_list
 
         hcols_x_list, gap_mask_x_list = self._get_from_cache(self._key_x, from_scratch)
         hcols_y_list, gap_mask_y_list = self._get_from_cache(self._key_y, from_scratch)
@@ -128,59 +149,57 @@ class HomologySetMetric(Metric):
         # Used for d_seq, d_pos
 
         def from_scratch(key):
-            S, Q = self._get_standard_input(key)
-            A_code = encoding.encode_positions(
-                S, self._L_max, encoding_enum, int_dtype=self._dtype
-            )
+            S, Q, K, L_k_list, L_max = self._get_metric_prerequisites(key)
+            A_code = encoding.encode_positions(S, encoding_enum, int_dtype=self._dtype)
             hcols_list = []
-            for k in range(self._K):
+            for k in range(K):
                 hcols_list.append(np.delete(A_code[:, Q[k]], k, axis=0))
-            return hcols_list
+            return hcols_list, K, L_k_list
 
-        hcols_x_list = self._get_from_cache(self._key_x, from_scratch)
-        hcols_y_list = self._get_from_cache(self._key_y, from_scratch)
+        hcols_x_list, K, L_k_list = self._get_from_cache(self._key_x, from_scratch)
+        hcols_y_list, K, L_k_list = self._get_from_cache(self._key_y, from_scratch)
 
         norm_hamming_dist = []
         for k in range(len(hcols_x_list)):
             seq_dists = np.sum(hcols_x_list[k] != hcols_y_list[k])
             norm_hamming_dist.append(seq_dists)
 
-        num_total_sites = np.sum(self._L_k_list)
-        dist = np.sum(norm_hamming_dist) / (num_total_sites * (self._K - 1))
+        num_total_sites = np.sum(L_k_list)
+        dist = np.sum(norm_hamming_dist) / (num_total_sites * (K - 1))
         return dist
 
 
 # # # # # Subclasses # # # # #
 
 
-class SSPDistance(HomologySetMetric):
+class SSPDistance(_HomologySetMetric):
     enum = FE.SSP_DIST
     name = str(enum)
 
-    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
+    def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
         self._init_key_map(alignment_x, alignment_y)
         return self._avg_jaccard_coef(PositionalEncodingEnum.UNIFORM)
 
 
-class HomologySeqDistance(HomologySetMetric):
-    enum = FE.HOMOLOGY_SEQ_DIST
+class DSeqDistance(_HomologySetMetric):
+    enum = FE.D_SEQ_DIST
     name = str(enum)
 
-    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
+    def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
         self._init_key_map(alignment_x, alignment_y)
         return self._avg_hamming_dist(PositionalEncodingEnum.SEQUENCE)
 
 
-class HomologyPosDistance(HomologySetMetric):
-    enum = FE.HOMOLOGY_POS_DIST
+class DPosDistance(_HomologySetMetric):
+    enum = FE.D_POS_DIST
     name = str(enum)
 
-    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
+    def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
         self._init_key_map(alignment_x, alignment_y)
         return self._avg_hamming_dist(PositionalEncodingEnum.POSITION)
 
 
-class PerceptualHammingDistance(Metric):
+class PHashDistance(_Metric):
     enum = FE.PERC_HASH_HAMMING
     name = None
 
@@ -189,7 +208,7 @@ class PerceptualHammingDistance(Metric):
         self._hash_size = hash_size
         self._cache = cache
 
-    def compute(self, alignment_x: Alignment, alignment_y: Alignment):
+    def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
         self._init_key_map(alignment_x, alignment_y)
 
         def from_scratch(key, max_len: int):
@@ -199,7 +218,7 @@ class PerceptualHammingDistance(Metric):
             )
             return hash
 
-        max_len = max(alignment_x.number_of_sites(), alignment_y.number_of_sites())
+        max_len = max(alignment_x.shape[1], alignment_y.shape[1])
         hash_x = self._get_from_cache(self._key_x, from_scratch, max_len=max_len)
         hash_y = self._get_from_cache(self._key_y, from_scratch, max_len=max_len)
 
@@ -215,9 +234,9 @@ class PerceptualHammingDistance(Metric):
         )
 
 
-_CUSTOM_METRICS: list[Metric] = [
+_CUSTOM_METRICS: list[_Metric] = [
     SSPDistance(),
-    HomologySeqDistance(),
-    HomologyPosDistance(),
-    PerceptualHammingDistance(16),
+    DSeqDistance(),
+    DPosDistance(),
+    PHashDistance(),
 ]
