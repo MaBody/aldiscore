@@ -1,3 +1,8 @@
+"""
+Dataset module for handling collections of unaligned biological sequences.
+Provides a Dataset class for storing, sorting, and inferring data types of sequence records.
+"""
+
 from Bio.SeqRecord import SeqRecord
 from aldiscore.datastructures import utils
 from aldiscore.enums.enums import DataTypeEnum
@@ -5,21 +10,24 @@ from aldiscore.enums.enums import DataTypeEnum
 
 class Dataset:
     """
-    Class structure encapsulating raw, unaligned sequences.
-    This class provides methods for computing features on the unaligned sequences, as well as for generating MSAs using
-    various different MSA tools.
+    Represents a collection of unaligned biological sequences.
 
-    Parameters
-    ----------
-    sequences : pathlib.Path
-        Filepath of the unaligned sequences in FASTA format.
+    This class stores a list of sequence records, optionally sorts them,
+    and infers the data type if not provided. It also provides access to
+    sequence lengths and the original sorting indices.
 
     Attributes
     ----------
-    sequences : pathlib.Path
-        Filepath of the unaligned sequences in FASTA format.
-    sequence_records : list[SeqIO.SeqRecord]
-        List containing the unaligned sequences as `SeqIO.SeqRecord` objects.
+    records : list[SeqRecord]
+        List of unaligned sequence records.
+    data_type : DataTypeEnum
+        Type of biological data (e.g., DNA, RNA, protein).
+    _sorted : bool
+        Whether the records have been sorted.
+    _sort_idxs : list[int]
+        Indices representing the sorting order (if sorted).
+    _sequence_lengths : list[int]
+        Lengths of each sequence in the dataset.
     """
 
     def __init__(
@@ -28,6 +36,18 @@ class Dataset:
         data_type: DataTypeEnum = None,
         sort_sequences: bool = True,
     ):
+        """
+        Initialize a Dataset instance.
+
+        Parameters
+        ----------
+        records : list[SeqRecord]
+            List of unaligned sequence records.
+        data_type : DataTypeEnum, optional
+            Type of biological data. If None, inferred automatically.
+        sort_sequences : bool, default=True
+            Whether to sort the sequences by a stable order.
+        """
         # Apply stable sorting to the sequences
         self._sorted = sort_sequences
         if sort_sequences:
