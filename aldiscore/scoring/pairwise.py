@@ -31,12 +31,12 @@ class _Metric(ABC):
     name : str
         Name of the metric.
     _cache : dict or None
-        Optional cache for storing intermediate results.
+        Cache for storing intermediate results.
     _dtype : type
         Numpy dtype used for encoding.
     """
 
-    def __init__(self, cache: dict = None):
+    def __init__(self, cache: dict = {}):
         """
         Initialize the metric with an optional cache.
 
@@ -44,13 +44,13 @@ class _Metric(ABC):
         ----------
         cache : dict, optional
             Dictionary for caching intermediate results.
+            Caching is applied by default. The parameter allows for re-using an existing cache.
         """
         self._cache = cache
 
     def compute(
         self,
         ensemble: Ensemble,
-        cache: dict = {},
         format: Literal["flat", "matrix"] = "flat",
     ):
         """
@@ -60,8 +60,6 @@ class _Metric(ABC):
         ----------
         ensemble : Ensemble
             Ensemble of alignments to compare.
-        cache : dict, optional
-            Cache for storing/retrieving intermediate results.
         format : {"flat", "matrix"}, default="flat"
             Output format: flat list or square matrix.
 
@@ -71,7 +69,6 @@ class _Metric(ABC):
             Array of pairwise distances.
         """
         scores = []
-        self._cache = cache
 
         index_pairs = list(itertools.combinations(range(len(ensemble.alignments)), r=2))
         for idx_x, idx_y in index_pairs:
@@ -404,7 +401,7 @@ class PHashDistance(_Metric):
     enum = FE.PERC_HASH_HAMMING
     name = None
 
-    def __init__(self, hash_size: int = 16, cache: dict = None):
+    def __init__(self, hash_size: int = 16, cache: dict = {}):
         """
         Initialize the perceptual hash distance metric.
 
@@ -413,7 +410,8 @@ class PHashDistance(_Metric):
         hash_size : int, default=16
             Size of the perceptual hash in bits.
         cache : dict, optional
-            Optional cache for intermediate results.
+            Dictionary for caching intermediate results.
+            Caching is applied by default. The parameter allows for re-using an existing cache.
         """
         self.name = self.enum + f"_{hash_size}bit"
         self._hash_size = hash_size
