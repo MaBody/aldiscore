@@ -9,28 +9,17 @@ from aldiscore.datastructures import utils
 
 
 class Alignment:
-    """Class structure for Multiple Sequence Alignment statistics. Applies stable ordering to sequences.
+    """
+    Represents a multiple sequence alignment (MSA) and provides utility methods for
+    manipulating and exporting the alignment.
 
-    Args
-    ----
-        msa_file (FilePath): Path to the MSA file the statistics should be computed for. The file must be either in "fasta" or "phylip" format.
-        msa_name (str, optional): Better readable name for the MSA. If not set, the name of the file is used.
-        file_format (FileFormat, optional): If not set, Pythia attempts to autodetect the file format.
-
-    Attributes
-    ----------
-        msa_file (FilePath): Path to the corresponding MSA file.
-        msa_name (str): Name of the MSA. Can be either set or is inferred automatically based on the msa_file.
-        data_type (DataType): Data type of the MSA.
-        file_format (FileFormat): File format of the MSA.
-        msa (MultipleSeqAlignment): Biopython MultipleSeqAlignment object for the given msa_file.
-        _tool:str
-            The name of the tool that produced the alignment (internal use only).
-
-    Raises
-    ------
-        ValueError: If the file format of the given MSA is not FASTA or PHYLIP.
-        ValueError: If the data type of the given MSA cannot be inferred.
+    Attributes:
+        msa (MultipleSeqAlignment): The Biopython MSA object, optionally sorted.
+        data_type (DataTypeEnum): The type of data (e.g., DNA, RNA, protein).
+        key (str): Unique key for the alignment, used for caching.
+        shape (tuple): Tuple of (number of sequences, alignment length).
+        _sorted (bool): Whether the sequences are sorted.
+        _sort_idxs (list): Indices used for sorting, if applicable.
     """
 
     def __init__(
@@ -40,6 +29,14 @@ class Alignment:
         sort_sequences: bool = True,
         # name: str = None,
     ):
+        """
+        Initialize an Alignment object.
+
+        Args:
+            msa (MultipleSeqAlignment): The input MSA object.
+            data_type (DataTypeEnum, optional): Data type of the sequences. If None, inferred automatically.
+            sort_sequences (bool, optional): If True, sequences are sorted in a stable order.
+        """
         # Applies a stable sorting to the sequences
         self._sorted = sort_sequences
         if sort_sequences:
@@ -60,6 +57,13 @@ class Alignment:
         self.shape = (len(self.msa), self.msa.get_alignment_length())
 
     def save_to_fasta(self, out_file: pathlib.Path, no_gaps: bool = False):
+        """
+        Save the alignment to a FASTA file.
+
+        Args:
+            out_file (pathlib.Path): Output file path.
+            no_gaps (bool, optional): If True, gaps are removed from sequences before saving.
+        """
         with open(out_file, "w") as outfile:
             for sequence in self.msa:
                 outfile.write(f">{sequence.id}\n")
@@ -70,6 +74,12 @@ class Alignment:
                 outfile.write("\n")
 
     def get_dataset(self):
+        """
+        Convert the alignment to a Dataset object with all gaps removed.
+
+        Returns:
+            Dataset: Dataset object containing ungapped sequences.
+        """
         ungapped_records = []
         for record in self.msa:
             rec = SeqRecord(Seq(str(record.seq).replace(GAP_CHAR, "")), id=record.id)
