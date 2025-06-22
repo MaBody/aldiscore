@@ -1,3 +1,10 @@
+"""
+Utility functions for sequence and alignment data structures.
+
+Provides helper functions for sorting, comparing, and inferring types of biological sequence records,
+as well as generating unique keys for collections of sequences.
+"""
+
 import functools
 import numpy as np
 import pandas as pd
@@ -8,6 +15,23 @@ from aldiscore.constants.constants import DNA_CHARS, AA_CHARS, GAP_CHAR
 
 
 def _compare_ungapped_rows(idx_a, idx_b, records):
+    """
+    Compare two sequence records by their ungapped sequence content.
+
+    Parameters
+    ----------
+    idx_a : int
+        Index of the first sequence record.
+    idx_b : int
+        Index of the second sequence record.
+    records : list[SeqRecord] | MultipleSeqAlignment
+        Collection of sequence records.
+
+    Returns
+    -------
+    int
+        Negative if record at idx_a < idx_b, positive if >, zero if equal.
+    """
     i, j = 0, 0
     len_record_a = len(records[idx_a])
     len_record_b = len(records[idx_b])
@@ -26,6 +50,23 @@ def _compare_ungapped_rows(idx_a, idx_b, records):
 
 
 def _compare_ids(idx_a, idx_b, records):
+    """
+    Compare two sequence records by their IDs.
+
+    Parameters
+    ----------
+    idx_a : int
+        Index of the first sequence record.
+    idx_b : int
+        Index of the second sequence record.
+    records : list[SeqRecord] | MultipleSeqAlignment
+        Collection of sequence records.
+
+    Returns
+    -------
+    int
+        Negative if record at idx_a < idx_b, positive if >, zero if equal.
+    """
     ords_a = [ord(char) for char in records[idx_a].id]
     ords_b = [ord(char) for char in records[idx_b].id]
     for ord_a, ord_b in zip(ords_a, ords_b):
@@ -38,6 +79,21 @@ def _compare_ids(idx_a, idx_b, records):
 
 
 def argsort_seq_order(records: list[SeqRecord] | MultipleSeqAlignment):
+    """
+    Return the indices that would sort the records in a stable, canonical order.
+
+    Uses IDs if all are unique, otherwise sorts by ungapped sequence content.
+
+    Parameters
+    ----------
+    records : list[SeqRecord] | MultipleSeqAlignment
+        Collection of sequence records.
+
+    Returns
+    -------
+    list[int]
+        Indices that sort the records.
+    """
     use_ids = len(set([record.id for record in records])) == len(records)
     if use_ids:
         sorting_func = _compare_ids
@@ -49,24 +105,28 @@ def argsort_seq_order(records: list[SeqRecord] | MultipleSeqAlignment):
     )
 
 
-# TODO: Remove if not needed
-# def _sort_sequences(self, sequences: list):
-#     # Get the maximum sequence length to determine the padding sizes
-#     L_max = max([len(seq.seq) for seq in sequences])
-#     # Add gaps as padding to simulate alignment (gaps are ignored in the sorting)
-#     padded_sequences = []
-#     for seq in sequences:
-#         padded_seq = str(seq.seq) + "-" * (L_max - len(seq))
-#         padded_sequences.append(SeqRecord(Seq(padded_seq), id=seq.id))
-#     # padded_sequences = np.array(
-#     #     [np.concatenate((seq, ["-"] * (L_max - len(seq)))) for seq in sequences]
-#     # )
-#     # Get the indices that sort the sequences (implementation only works for alignments)
-#     sort_idxs = argsort_seq_order(MultipleSeqAlignment(padded_sequences))
-#     return sort_idxs
-
-
 def infer_data_type(records: list[SeqRecord] | MultipleSeqAlignment):
+    """
+    Infer the biological data type (DNA or protein) from a collection of sequence records.
+
+    Examines the first sufficiently long ungapped sequence and determines the type
+    based on character composition.
+
+    Parameters
+    ----------
+    records : list[SeqRecord] | MultipleSeqAlignment
+        Collection of sequence records.
+
+    Returns
+    -------
+    DataTypeEnum
+        Inferred data type (DNA or AA).
+
+    Raises
+    ------
+    AssertionError
+        If the alphabet cannot be determined.
+    """
     ungapped = None
     for seq in records:
         ungapped = str(seq.seq).replace(GAP_CHAR, "")[:1000].upper()
@@ -95,6 +155,19 @@ def infer_data_type(records: list[SeqRecord] | MultipleSeqAlignment):
 
 
 def get_unique_key(records: list[SeqRecord] | MultipleSeqAlignment):
+    """
+    Generate a unique hash key for a collection of sequence records based on their sequence content.
+
+    Parameters
+    ----------
+    records : list[SeqRecord] | MultipleSeqAlignment
+        Collection of sequence records.
+
+    Returns
+    -------
+    int
+        Hash value representing the collection.
+    """
     key_str = "#".join(map(lambda record: str(record.seq), records))
     key = hash(key_str)
     return key
