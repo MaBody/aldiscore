@@ -1,3 +1,15 @@
+"""
+Implements set-based "confusion scores" for quantifying agreement in an ensemble of alignments.
+
+Provides three main variants:
+- ConfusionSet: Agreement based on unique sets of aligned residues.
+- ConfusionEntropy: Agreement based on entropy across replicates.
+- ConfusionDisplace: Agreement based on displacement (spread) of aligned residues.
+
+These scores operate by aggregating information across all alignments in the ensemble,
+using different strategies to summarize the consistency of residue placement.
+"""
+
 import numpy as np
 from typing import Literal
 from tqdm import tqdm
@@ -8,6 +20,22 @@ from aldiscore.scoring import encoding
 
 
 class _ConfusionScore(ABC):
+    """
+    Base class for set-based confusion scores on alignment ensembles.
+
+    Handles aggregation and preparation of encoded alignment data for downstream
+    agreement/confusion calculations.
+
+    Parameters
+    ----------
+    aggregate : {"site", "sequence", None}, optional
+        Aggregation strategy for the output (default: None).
+    code_dtype : np.dtype, optional
+        Data type for encoded positions (default: np.int32).
+    verbose : bool, optional
+        Whether to show progress bars (default: False).
+    """
+
     def __init__(
         self,
         aggregate: Literal["site", "sequence", None] = None,
@@ -20,17 +48,44 @@ class _ConfusionScore(ABC):
         self._verbose = verbose
 
     def compute(self, ensemble: Ensemble) -> float | np.ndarray | list[np.ndarray]:
+        """
+        Compute the confusion score for an ensemble of alignments.
+
+        Parameters
+        ----------
+        ensemble : Ensemble
+            Ensemble of alignments to evaluate.
+
+        Returns
+        -------
+        float or np.ndarray or list[np.ndarray]
+            The confusion score(s), aggregated as specified.
+        """
         self._compute_prerequisites(ensemble)
         self._compute_bespoke_arguments()
         return self._confusion()
 
     def _seq_confusion(self):
+        """
+        Compute the confusion score for a single sequence (to be implemented by subclasses).
+        """
         raise NotImplementedError()
 
     def _compute_bespoke_arguments(self):
+        """
+        Compute any subclass-specific arguments needed for the confusion calculation.
+        """
         pass
 
     def _compute_prerequisites(self, ensemble: Ensemble):
+        """
+        Prepare encoded alignments and index mappings for all alignments in the ensemble.
+
+        Parameters
+        ----------
+        ensemble : Ensemble
+            Ensemble of alignments to process.
+        """
         self._K = len(ensemble.dataset.records)
         self._I = len(ensemble.alignments)
         self._N_k_list = ensemble.dataset._sequence_lengths.copy()
@@ -50,12 +105,44 @@ class _ConfusionScore(ABC):
             self._A_code_list.append(A_code)
 
     def _compute_replication_sets(self, k: int):
+        """
+        For a given sequence index k, collect the replication sets for each residue in that sequence.
+        The confusion of each residue is based on the agreement on its aligned positions.
+        Each residue is aligned with K-1 residues per replicate.
+        Including the given index k (removed later), that results in a K x I matrix per residue (K replication sets).
+
+
+        Parameters
+        ----------
+        k : int
+            Sequence index.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (N_k, K, I) containing replication sets for sequence k.
+        """
         rcols = np.empty((self._N_k_list[k], self._K, self._I), dtype=self._dtype)
         for i in range(self._I):
             rcols[:, :, i] = self._A_code_list[i][:, self._Q_list[i][k]].T
         return rcols
 
     def _aggregate_site_vals(self, site_vals, aggregate):
+        """
+        Aggregate confusion values across sites or sequences.
+
+        Parameters
+        ----------
+        site_vals : list
+            List of confusion values per site.
+        aggregate : {"site", "sequence", None}
+            Aggregation strategy.
+
+        Returns
+        -------
+        float or np.ndarray or list
+            Aggregated confusion score(s).
+        """
         if aggregate == "site":
             out = np.mean(np.concatenate(site_vals))
         elif aggregate == "sequence":
@@ -67,6 +154,14 @@ class _ConfusionScore(ABC):
         return out
 
     def _confusion(self):
+        """
+        Compute the confusion score for all sequences in the ensemble.
+
+        Returns
+        -------
+        float or np.ndarray or list
+            Aggregated confusion score(s).
+        """
         site_vals = []
         K_range = tqdm(list(range(self._K))) if self._verbose else range(self._K)
         for k in K_range:
@@ -79,6 +174,13 @@ class _ConfusionScore(ABC):
 
 
 class ConfusionSet(_ConfusionScore):
+    """
+    Computes the set-based confusion score for an ensemble of alignments.
+
+    Measures agreement by counting the average number of unique residues in the replication sets,
+    normalized by the number of alignments. Lower values indicate higher agreement.
+    """
+
     def _seq_confusion(self, rcols, k):
         # These comments describe what is going on below. The shape of the current array is on the left
         # (N_k, K, I)   -> np.delete (delete kth entry from homology column to remove the site itself) ->
@@ -113,12 +215,19 @@ class ConfusionSet(_ConfusionScore):
 
 
 class ConfusionEntropy(_ConfusionScore):
+    """
+    Computes the entropy-based confusion score for an ensemble of alignments.
+
+    Measures agreement by calculating the average entropy of aligned residue distributions per replication set,
+    normalized by the maximal possible entropy for a set of I samples.
+    Lower values indicate higher agreement.
+    """
+
     def _compute_bespoke_arguments(self):
         uniform = np.full(shape=self._I, fill_value=(1 / self._I))
         self._max_entropy = -np.sum(uniform * np.log2(uniform))
 
     def _seq_confusion(self, rcols, k) -> np.ndarray:
-        # TODO: Add comments to make this comprehensible
         # Compute entropy over replicate set ("I" dimension), average over replicate sets of homology column
         N_k = self._N_k_list[k]
         rep_cols = np.sort(np.delete(rcols, k, axis=1), axis=2)
@@ -145,6 +254,26 @@ class ConfusionEntropy(_ConfusionScore):
 
 
 class ConfusionDisplace(_ConfusionScore):
+    """
+    Computes the displacement-based confusion score for an ensemble of alignments.
+
+    Measures agreement by quantifying the spread (standard deviation) of aligned residue positions
+    across replicates, using user-defined thresholds and weights. Lower values indicate higher agreement.
+
+    Parameters
+    ----------
+    thresholds : list[int], optional
+        List of thresholds for displacement (default: [0, 1, 2, 4, 8, 16, 32]).
+    weights : list[float], optional
+        Weights for each threshold (default: uniform).
+    aggregate : {"site", "sequence", None}, optional
+        Aggregation strategy for the output (default: None).
+    code_dtype : np.dtype, optional
+        Data type for encoded positions (default: np.int32).
+    verbose : bool, optional
+        Whether to show progress bars (default: False).
+    """
+
     def __init__(
         self,
         thresholds: list[int] = [0, 1, 2, 4, 8, 16, 32],
