@@ -1,3 +1,10 @@
+"""
+Implements pairwise distance metrics between alignments of the same dataset.
+
+Provides metric classes for computing distances between alignments, with optional caching
+to avoid redundant computation when evaluating similarity matrices.
+"""
+
 import itertools
 import numpy as np
 from abc import ABC
@@ -11,12 +18,33 @@ from typing import Literal
 
 
 class _Metric(ABC):
-    enum = None
-    name = None
-    _cache = None
-    _dtype = np.int32
+    """
+    Abstract base class for pairwise alignment distance metrics.
+
+    Provides a caching mechanism and a standard interface for computing
+    pairwise distance scores between alignments in an ensemble.
+
+    Attributes
+    ----------
+    enum : FeatureEnum
+        Enum identifier for the metric.
+    name : str
+        Name of the metric.
+    _cache : dict or None
+        Optional cache for storing intermediate results.
+    _dtype : type
+        Numpy dtype used for encoding.
+    """
 
     def __init__(self, cache: dict = None):
+        """
+        Initialize the metric with an optional cache.
+
+        Parameters
+        ----------
+        cache : dict, optional
+            Dictionary for caching intermediate results.
+        """
         self._cache = cache
 
     def compute(
@@ -25,6 +53,23 @@ class _Metric(ABC):
         cache: dict = {},
         format: Literal["flat", "matrix"] = "flat",
     ):
+        """
+        Compute pairwise distance scores for all pairs in an ensemble.
+
+        Parameters
+        ----------
+        ensemble : Ensemble
+            Ensemble of alignments to compare.
+        cache : dict, optional
+            Cache for storing/retrieving intermediate results.
+        format : {"flat", "matrix"}, default="flat"
+            Output format: flat list or square matrix.
+
+        Returns
+        -------
+        np.ndarray
+            Array of pairwise distances.
+        """
         scores = []
         self._cache = cache
 
@@ -48,19 +93,24 @@ class _Metric(ABC):
         alignment_y: Alignment,
     ) -> float:
         """
-        Computes the pairwise distances of alignments in the ensemble.
+        Compute the pairwise distance between two alignments.
 
         Parameters
         ----------
-        - alignment_x: Alignment
-            First alignment for the distance computation.
-        - alignment_y: Alignment
-            Second alignment for the distance computation.
+        alignment_x : Alignment
+            First alignment for the computation.
+        alignment_y : Alignment
+            Second alignment for the computation.
 
         Returns
         -------
-        -dist: float
-            The computed distance
+        float
+            The computed distance.
+
+        Raises
+        ------
+        NotImplementedError
+            If not implemented in subclass.
         """
         raise NotImplementedError()
 
@@ -71,11 +121,39 @@ class _Metric(ABC):
         key_x=None,
         key_y=None,
     ):
+        """
+        Initialize internal mapping from keys to alignments for caching.
+
+        Parameters
+        ----------
+        alignment_x : Alignment
+            First alignment.
+        alignment_y : Alignment
+            Second alignment.
+        key_x : optional
+            Key for the first alignment.
+        key_y : optional
+            Key for the second alignment.
+        """
         self._key_x = alignment_x.key if key_x is None else key_x
         self._key_y = alignment_y.key if key_y is None else key_y
         self._alignment_map = {self._key_x: alignment_x, self._key_y: alignment_y}
 
     def _get_metric_prerequisites(self, key):
+        """
+        Prepare and return common prerequisites for metric computation.
+
+        Parameters
+        ----------
+        key : hashable
+            Key identifying the alignment.
+
+        Returns
+        -------
+        tuple
+            Tuple containing sequence array, index mapping, number of sequences,
+            list of sequence lengths, and maximum sequence length.
+        """
         S = np.array(self._alignment_map[key].msa)
         Q = encoding.gapped_index_mapping(S, self._dtype)
         K = len(S)
@@ -84,6 +162,23 @@ class _Metric(ABC):
         return S, Q, K, L_k_list, L_max
 
     def _get_from_cache(self, key, compute_cachables: callable, **kwargs):
+        """
+        Retrieve a value from cache or compute and store it if not present.
+
+        Parameters
+        ----------
+        key : hashable
+            Key for the cached value.
+        compute_cachables : callable
+            Function to compute the value if not cached.
+        **kwargs
+            Additional arguments for the compute function.
+
+        Returns
+        -------
+        Any
+            Cached or newly computed value.
+        """
         use_cache = self._cache is not None
         cached_content = None
         if use_cache:
@@ -101,6 +196,14 @@ class _Metric(ABC):
         return out
 
     def _everything_cached(self):
+        """
+        Check if all required values for the current metric are cached.
+
+        Returns
+        -------
+        bool
+            True if all required values are cached, False otherwise.
+        """
         return (
             (self._cache is not None)
             and (self.name in self._cache)
@@ -110,8 +213,24 @@ class _Metric(ABC):
 
 
 class _HomologySetMetric(_Metric):
+    """
+    Base class for metrics that operate on sets of homologous columns in alignments.
+    """
+
     def _avg_jaccard_coef(self, encoding_enum: PositionalEncodingEnum):
-        # Used for d_SSP
+        """
+        Compute the average Jaccard coefficient-based distance between two alignments (used for SSP).
+
+        Parameters
+        ----------
+        encoding_enum : PositionalEncodingEnum
+            Encoding scheme for positions.
+
+        Returns
+        -------
+        float
+            Jaccard-based distance between the encoded alignments.
+        """
 
         def from_scratch(key):
             S, Q, K, L_k_list, L_max = self._get_metric_prerequisites(key)
@@ -146,7 +265,19 @@ class _HomologySetMetric(_Metric):
         return dist
 
     def _avg_hamming_dist(self, encoding_enum: PositionalEncodingEnum):
-        # Used for d_seq, d_pos
+        """
+        Compute the average normalized Hamming distance between two alignments (used for D_seq, D_pos).
+
+        Parameters
+        ----------
+        encoding_enum : PositionalEncodingEnum
+            Encoding scheme for positions.
+
+        Returns
+        -------
+        float
+            Normalized Hamming distance between the encoded alignments.
+        """
 
         def from_scratch(key):
             S, Q, K, L_k_list, L_max = self._get_metric_prerequisites(key)
@@ -173,42 +304,137 @@ class _HomologySetMetric(_Metric):
 
 
 class SSPDistance(_HomologySetMetric):
+    """
+    Computes the SSP (symmetrized sum-of-pairs) distance between two alignments.
+    """
+
     enum = FE.SSP_DIST
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
+        """
+        Compute the SSP distance between two alignments.
+
+        Parameters
+        ----------
+        alignment_x : Alignment
+            First alignment.
+        alignment_y : Alignment
+            Second alignment.
+
+        Returns
+        -------
+        float
+            The SSP distance.
+        """
         self._init_key_map(alignment_x, alignment_y)
         return self._avg_jaccard_coef(PositionalEncodingEnum.UNIFORM)
 
 
 class DSeqDistance(_HomologySetMetric):
+    """
+    Computes the "D_seq" distance between two alignments.
+    """
+
     enum = FE.D_SEQ_DIST
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
+        """
+        Compute the "D_seq" distance between two alignments.
+
+        Parameters
+        ----------
+        alignment_x : Alignment
+            First alignment.
+        alignment_y : Alignment
+            Second alignment.
+
+        Returns
+        -------
+        float
+            The "D_seq" distance.
+        """
         self._init_key_map(alignment_x, alignment_y)
         return self._avg_hamming_dist(PositionalEncodingEnum.SEQUENCE)
 
 
 class DPosDistance(_HomologySetMetric):
+    """
+    Computes the "D_pos" distance between two alignments.
+    """
+
     enum = FE.D_POS_DIST
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
+        """
+        Compute the "D_pos" distance between two alignments.
+
+        Parameters
+        ----------
+        alignment_x : Alignment
+            First alignment.
+        alignment_y : Alignment
+            Second alignment.
+
+        Returns
+        -------
+        float
+            The D_pos distance.
+        """
         self._init_key_map(alignment_x, alignment_y)
         return self._avg_hamming_dist(PositionalEncodingEnum.POSITION)
 
 
 class PHashDistance(_Metric):
+    """
+    Computes the perceptual hash-based Hamming distance between two alignments.
+
+    Attributes
+    ----------
+    enum : FeatureEnum
+        Enum identifier for the metric.
+    name : str
+        Name of the metric, includes hash size.
+    _hash_size : int
+        Size of the hash in bits.
+    """
+
     enum = FE.PERC_HASH_HAMMING
     name = None
 
     def __init__(self, hash_size: int = 16, cache: dict = None):
+        """
+        Initialize the perceptual hash distance metric.
+
+        Parameters
+        ----------
+        hash_size : int, default=16
+            Size of the perceptual hash in bits.
+        cache : dict, optional
+            Optional cache for intermediate results.
+        """
         self.name = self.enum + f"_{hash_size}bit"
         self._hash_size = hash_size
         self._cache = cache
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
+        """
+        Compute the perceptual hash-based Hamming distance between two alignments.
+
+        Parameters
+        ----------
+        alignment_x : Alignment
+            First alignment.
+        alignment_y : Alignment
+            Second alignment.
+
+        Returns
+        -------
+        float
+            Normalized Hamming distance between the hashes.
+        """
         self._init_key_map(alignment_x, alignment_y)
 
         def from_scratch(key, max_len: int):
@@ -226,17 +452,24 @@ class PHashDistance(_Metric):
         return dist
 
     def _pad_msa(self, msa: np.ndarray, length: int) -> np.ndarray:
+        """
+        Pad an MSA array to the specified number of columns with gap characters.
+
+        Parameters
+        ----------
+        msa : np.ndarray
+            Multiple sequence alignment array.
+        length : int
+            Desired number of columns.
+
+        Returns
+        -------
+        np.ndarray
+            Padded MSA array.
+        """
         cols_to_pad = length - msa.shape[1]
         if not cols_to_pad:
             return msa
         return np.concatenate(
             [msa, np.full((len(msa), cols_to_pad), fill_value=GAP_CHAR)], axis=1
         )
-
-
-_CUSTOM_METRICS: list[_Metric] = [
-    SSPDistance(),
-    DSeqDistance(),
-    DPosDistance(),
-    PHashDistance(),
-]
