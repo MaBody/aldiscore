@@ -1,28 +1,40 @@
+"""
+Ensemble module for handling collections of replicate sequence alignments.
+Provides an Ensemble class for storing, referencing, and accessing alignment sets and their associated datasets.
+"""
+
 from aldiscore.datastructures.alignment import Alignment
 from aldiscore.datastructures.dataset import Dataset
 
 
 class Ensemble:
     """
-    Class encapsulating a set of replicate alignments for the same set of sequences.
-    This class provides methods for computing features on this set of alignments.
+    Represents a collection of replicate alignments for the same set of sequences.
 
-    Parameters
-    ----------
-    ensemble : list[Alignment]
-        List of replicate alignments (subclass of PyPythia `MSA`).
-    dataset : Dataset
-        The dataset on which the ensemble is computed.
+    Stores a list of Alignment objects and the associated Dataset. Provides access to
+    the data type and ensures the dataset is consistent with the alignments.
 
     Attributes
     ----------
-    ensemble : list[Alignment]
-        List of replicate alignments (subclass of PyPythia `MSA`).
+    alignments : list[Alignment]
+        List of replicate alignment objects.
     dataset : Dataset
-        The dataset on which the ensemble is computed.
+        Dataset associated with the alignments.
+    data_type : DataTypeEnum
+        Type of biological data (e.g., DNA, RNA, protein).
     """
 
     def __init__(self, alignments: list[Alignment], dataset: Dataset = None):
+        """
+        Initialize an Ensemble instance.
+
+        Parameters
+        ----------
+        alignments : list[Alignment]
+            List of replicate alignment objects.
+        dataset : Dataset, optional
+            Dataset associated with the alignments. If None, inferred from the first alignment.
+        """
         self.alignments = alignments
 
         if dataset is None:
