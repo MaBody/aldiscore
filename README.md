@@ -28,7 +28,7 @@ We build our implementation on top of BioPython data classes (Seq, SeqRecord, Mu
 
 ## Scoring
 
-We provide implementations for six scoring methods that compute the dispersion within an ensemble of alignments.
+We provide implementations for seven scoring methods that compute the dispersion within an ensemble of alignments.
 The scores can be used as a proxy for the uncertainty/difficulty of the alignment step.
 
 | Pairwise                          | Description                                                |
