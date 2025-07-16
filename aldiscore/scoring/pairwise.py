@@ -87,13 +87,21 @@ class _Metric(ABC):
             return self._compute_ensemble(ensemble)
         else:
             assert (
-                self._format == "scalar"
-            ), "Reference-based score only supports scalar format"
+                self._format != "matrix"
+            ), "Reference-based score only supports scalar and flat format"
+
             bi_ensembles = utils.get_bi_ensembles(ensemble, reference)
             scores = []
             for bi_ensemble in bi_ensembles:
                 scores.append(self._compute_ensemble(bi_ensemble))
-            return np.mean(scores)
+
+            match self._format:
+                case "scalar":
+                    return np.mean(scores)
+                case "flat":
+                    return np.array(scores)
+                case _:
+                    raise ValueError(f"Unknown strategy '{self._format}'")
 
     def _compute_ensemble(self, ensemble: Ensemble):
         scores = []
