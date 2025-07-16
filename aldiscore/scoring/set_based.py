@@ -16,7 +16,9 @@ from tqdm import tqdm
 from abc import ABC
 from aldiscore.enums.enums import PositionalEncodingEnum
 from aldiscore.datastructures.ensemble import Ensemble
+from aldiscore.datastructures.alignment import Alignment
 from aldiscore.scoring import encoding
+from aldiscore.scoring import utils
 
 
 class _ConfusionScore(ABC):
@@ -28,8 +30,8 @@ class _ConfusionScore(ABC):
 
     Parameters
     ----------
-    aggregate : {"site", "sequence", None}, optional
-        Aggregation strategy for the output (default: None).
+    format : {"scalar", "sequence", "site"}, optional
+        Aggregation strategy for the output (default: "scalar").
     code_dtype : np.dtype, optional
         Data type for encoded positions (default: np.int32).
     verbose : bool, optional
@@ -38,16 +40,18 @@ class _ConfusionScore(ABC):
 
     def __init__(
         self,
-        aggregate: Literal["site", "sequence", None] = None,
+        format: Literal["scalar", "sequence", "site"] = "scalar",
         code_dtype: np.dtype = np.int32,
         verbose: bool = False,
     ):
         super().__init__()
-        self._aggregate = aggregate
+        self._format = format
         self._dtype = code_dtype
         self._verbose = verbose
 
-    def compute(self, ensemble: Ensemble) -> float | np.ndarray | list[np.ndarray]:
+    def compute(
+        self, ensemble: Ensemble, reference: Alignment = None
+    ) -> float | np.ndarray | list[np.ndarray]:
         """
         Compute the confusion score for an ensemble of alignments.
 
@@ -55,15 +59,29 @@ class _ConfusionScore(ABC):
         ----------
         ensemble : Ensemble
             Ensemble of alignments to evaluate.
+        reference : Alignment, optional
+            If provided, computes average confusion with respect to reference.
 
         Returns
         -------
         float or np.ndarray or list[np.ndarray]
             The confusion score(s), aggregated as specified.
         """
-        self._compute_prerequisites(ensemble)
-        self._compute_bespoke_arguments()
-        return self._confusion()
+        if reference is None:
+            self._compute_prerequisites(ensemble)
+            self._compute_bespoke_arguments()
+            return self._confusion()
+        else:
+            assert (
+                self._format == "scalar"
+            ), "Reference-based score only supports scalar format"
+            bi_ensembles = utils.get_bi_ensembles(ensemble, reference)
+            scores = []
+            for bi_ensemble in bi_ensembles:
+                self._compute_prerequisites(bi_ensemble)
+                self._compute_bespoke_arguments()
+                scores.append(self._confusion())
+            return np.mean(scores)
 
     def _seq_confusion(self):
         """
@@ -127,7 +145,7 @@ class _ConfusionScore(ABC):
             rcols[:, :, i] = self._A_code_list[i][:, self._Q_list[i][k]].T
         return rcols
 
-    def _aggregate_site_vals(self, site_vals, aggregate):
+    def _aggregate_site_vals(self, site_vals, format):
         """
         Aggregate confusion values across sites or sequences.
 
@@ -135,22 +153,22 @@ class _ConfusionScore(ABC):
         ----------
         site_vals : list
             List of confusion values per site.
-        aggregate : {"site", "sequence", None}
+        format : {"scalar", "sequence", "site"}
             Aggregation strategy.
 
         Returns
         -------
-        float or np.ndarray or list
+        float or np.ndarray or list[np.ndarray]
             Aggregated confusion score(s).
         """
-        if aggregate == "site":
+        if format == "scalar":
             out = np.mean(np.concatenate(site_vals))
-        elif aggregate == "sequence":
+        elif format == "sequence":
             out = np.array([np.mean(seq_dists) for seq_dists in site_vals])
-        elif aggregate is None:
+        elif format == "site":
             return [seq_dists for seq_dists in site_vals]
         else:
-            raise ValueError(f"Unknown strategy {aggregate}")
+            raise ValueError(f"Unknown strategy {format}")
         return out
 
     def _confusion(self):
@@ -170,7 +188,7 @@ class _ConfusionScore(ABC):
             seq_confusion = self._seq_confusion(rcols, k)
             site_vals.append(seq_confusion)
 
-        return self._aggregate_site_vals(site_vals, self._aggregate)
+        return self._aggregate_site_vals(site_vals, self._format)
 
 
 class ConfusionSet(_ConfusionScore):
@@ -266,8 +284,8 @@ class ConfusionDisplace(_ConfusionScore):
         List of thresholds for displacement (default: [0, 1, 2, 4, 8, 16, 32]).
     weights : list[float], optional
         Weights for each threshold (default: uniform).
-    aggregate : {"site", "sequence", None}, optional
-        Aggregation strategy for the output (default: None).
+    format : {"scalar", "sequence", "site"}, optional
+        Aggregation strategy for the output (default: "scalar").
     code_dtype : np.dtype, optional
         Data type for encoded positions (default: np.int32).
     verbose : bool, optional
@@ -278,11 +296,11 @@ class ConfusionDisplace(_ConfusionScore):
         self,
         thresholds: list[int] = [0, 1, 2, 4, 8, 16, 32],
         weights: list[float] = [1, 1, 1, 1, 1, 1, 1],
-        aggregate: Literal["site", "sequence", None] = None,
+        format: Literal["scalar", "sequence", "site"] = "scalar",
         code_dtype: np.dtype = np.int32,
         verbose: bool = False,
     ):
-        super().__init__(aggregate, code_dtype, verbose)
+        super().__init__(format, code_dtype, verbose)
         self._thresholds = np.array(thresholds)
         self._norm_weights = np.array(weights) / np.sum(weights)
 

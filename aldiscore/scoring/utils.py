@@ -8,6 +8,7 @@ from numpy import typing as npt
 from scipy.fft import dct
 import pandas as pd
 from aldiscore.datastructures.ensemble import Ensemble
+from aldiscore.datastructures.alignment import Alignment
 from aldiscore.enums.enums import DataTypeEnum
 from aldiscore.constants.constants import DNA_CHAR_MAP, AA_CHAR_MAP
 
@@ -228,3 +229,8 @@ def compute_custom_metrics(
         # print(f"{name} : {time()- start}s")
         dist_dict[name] = dist
     return dist_dict
+
+
+def get_bi_ensembles(ensemble: Ensemble, reference: Alignment):
+    bi_ensembles = [Ensemble([inferred, reference]) for inferred in ensemble.alignments]
+    return bi_ensembles

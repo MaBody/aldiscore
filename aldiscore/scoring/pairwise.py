@@ -30,28 +30,42 @@ class _Metric(ABC):
         Enum identifier for the metric.
     name : str
         Name of the metric.
+    _format : {"scalar", "flat", "matrix"}, default="scalar"
+        Output format: scalar, flat list, or square matrix.
     _cache : dict or None
         Cache for storing intermediate results.
     _dtype : type
-        Numpy dtype used for encoding.
+        Numpy dtype used for positional encodings.
     """
 
-    def __init__(self, cache: dict = {}):
+    def __init__(
+        self,
+        format: Literal["scalar", "flat", "matrix"] = "scalar",
+        cache: dict = {},
+        dtype: type = np.int32,
+    ):
         """
         Initialize the metric with an optional cache.
 
         Parameters
         ----------
+        format : {"scalar", "flat", "matrix"}, default="scalar"
+            Output format: scalar, flat list, or square matrix.
         cache : dict, optional
             Dictionary for caching intermediate results.
             Caching is applied by default. The parameter allows for re-using an existing cache.
+        dtype : type
+            Numpy dtype used for positional encodings.
         """
+        super().__init__()
+        self._format = format
         self._cache = cache
+        self._dtype = dtype
 
     def compute(
         self,
         ensemble: Ensemble,
-        format: Literal["flat", "matrix"] = "flat",
+        reference: Alignment = None,
     ):
         """
         Compute pairwise distance scores for all pairs in an ensemble.
@@ -60,14 +74,28 @@ class _Metric(ABC):
         ----------
         ensemble : Ensemble
             Ensemble of alignments to compare.
-        format : {"flat", "matrix"}, default="flat"
-            Output format: flat list or square matrix.
+        reference : Alignment, optional
+            If provided, computes average distance with respect to reference.
 
         Returns
         -------
         np.ndarray
             Array of pairwise distances.
         """
+
+        if reference is None:
+            return self._compute_ensemble(ensemble)
+        else:
+            assert (
+                self._format == "scalar"
+            ), "Reference-based score only supports scalar format"
+            bi_ensembles = utils.get_bi_ensembles(ensemble, reference)
+            scores = []
+            for bi_ensemble in bi_ensembles:
+                scores.append(self._compute_ensemble(bi_ensemble))
+            return np.mean(scores)
+
+    def _compute_ensemble(self, ensemble: Ensemble):
         scores = []
 
         index_pairs = list(itertools.combinations(range(len(ensemble.alignments)), r=2))
@@ -78,11 +106,15 @@ class _Metric(ABC):
             )
             scores.append(score)
 
-        out = np.array(scores)
-        if format == "matrix":
-            out = utils.format_dist_mat(scores, ensemble)
-
-        return out
+        match self._format:
+            case "scalar":
+                return np.mean(scores)
+            case "flat":
+                return np.array(scores)
+            case "matrix":
+                return utils.format_dist_mat(scores, ensemble)
+            case _:
+                raise ValueError(f"Unknown strategy '{self._format}'")
 
     def compute_similarity(
         self,
@@ -401,7 +433,12 @@ class PHashDistance(_Metric):
     enum = FE.PERC_HASH_HAMMING
     name = None
 
-    def __init__(self, hash_size: int = 16, cache: dict = {}):
+    def __init__(
+        self,
+        hash_size: int = 16,
+        format: Literal["scalar", "flat", "matrix"] = "scalar",
+        cache: dict = {},
+    ):
         """
         Initialize the perceptual hash distance metric.
 
@@ -409,12 +446,15 @@ class PHashDistance(_Metric):
         ----------
         hash_size : int, default=16
             Size of the perceptual hash in bits.
+        format : {"scalar", "flat", "matrix"}, default="scalar"
+            Output format: scalar, flat list, or square matrix.
         cache : dict, optional
             Dictionary for caching intermediate results.
             Caching is applied by default. The parameter allows for re-using an existing cache.
         """
         self.name = self.enum + f"_{hash_size}bit"
         self._hash_size = hash_size
+        self._format = format
         self._cache = cache
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
