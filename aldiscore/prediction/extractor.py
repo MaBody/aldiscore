@@ -9,7 +9,7 @@ from typing import Callable, Optional, Tuple
 from Bio import Align, SeqIO
 from Bio.SeqRecord import SeqRecord
 import Bio.SeqRecord
-
+from abc import ABC
 
 from aldiscore.enums.enums import StringEnum
 
@@ -24,12 +24,11 @@ def _feature(func):
     return func
 
 
-class FeatureExtractor:
+class BaseFeatureExtractor(ABC):
     """Base class for a feature extractor."""
 
-    def __init__(self, sequences: list[SeqRecord], threads: int = 1):
+    def __init__(self, sequences: list[SeqRecord]):
         self._sequences = sequences
-        self._threads = threads
 
     def compute(self, exclude: list = None):
         "Runs all functions with the @_feature decorator and concatenates the output."
@@ -78,6 +77,9 @@ class FeatureExtractor:
         return feat_dict
 
     # # # # # features # # # # #
+
+
+class AlDIFeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _data_type(self) -> dict[str, list]:
