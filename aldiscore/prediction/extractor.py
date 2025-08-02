@@ -12,7 +12,8 @@ import Bio.SeqRecord
 from abc import ABC
 
 from aldiscore.enums.enums import StringEnum
-
+from aldiscore.datastructures.utils import infer_data_type
+from aldiscore.enums.enums import DataTypeEnum
 import traceback
 
 _FEATURE_FLAG = "_is_feature"
@@ -67,11 +68,15 @@ class BaseFeatureExtractor(ABC):
     def descriptive_statistics(cls, series: list, name: str | StringEnum):
         """Computes a range of descriptive statistics on a series (min, max, mean, etc.)."""
         feat_dict = {}
-        feat_dict["min_" + name] = min(series)
-        feat_dict["max_" + name] = max(series)
-        feat_dict["mean_" + name] = np.mean(series)
-        feat_dict["median_" + name] = np.median(series)
-        feat_dict["std_" + name] = np.std(series)
+        feat_dict["min:" + name] = np.min(series)
+        feat_dict["max:" + name] = np.max(series)
+        feat_dict["mean:" + name] = np.mean(series)
+        feat_dict["std:" + name] = np.std(series)
+        thresholds = [5, 10, 25, 50, 75, 90, 95]
+        percentiles = np.percentile(series, thresholds)
+        for t, p in zip(thresholds, percentiles):
+            feat_dict[f"p{t}:" + name] = np.percentile(series, p)
+        # feat_dict["median_" + name] = np.median(series)
         # iqr = np.percentile(series, 75) - np.percentile(series, 25)
         # feature_dict["iqr_" + name] = iqr
         return feat_dict
@@ -83,15 +88,15 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _data_type(self) -> dict[str, list]:
-        name = "data_type"
-        feat = str(self._sequences.data_type)
+        name = "is_dna"
+        feat = infer_data_type(self._sequences) == DataTypeEnum.DNA
         feat_dict = {name: feat}
         return feat_dict
 
     @_feature
     def _num_sequences(self) -> dict[str, list]:
-        name = "n_sequences"
-        feat = len(self._sequences.sequences)
+        name = "k"
+        feat = len(self._sequences)
         feat_dict = {name: feat}
         return feat_dict
 
@@ -105,7 +110,7 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
     @_feature
     def _sequence_length(self) -> dict[str, list]:
         name = "sequence_length"
-        feat = self._sequences._sequence_lengths
+        feat = list(map(len, self._sequences))
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
