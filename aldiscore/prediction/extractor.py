@@ -30,6 +30,7 @@ class BaseFeatureExtractor(ABC):
 
     def __init__(self, sequences: list[SeqRecord]):
         self._sequences = sequences
+        self._cache = {}
 
     def compute(self, exclude: list = None):
         "Runs all functions with the @_feature decorator and concatenates the output."
@@ -64,6 +65,12 @@ class BaseFeatureExtractor(ABC):
                 feature_funcs.append(attr)
         return feature_funcs
 
+    def _get_cached(self, name: str):
+        return self._cache.get(name)
+
+    def _set_cached(self, name: str, val):
+        self._cache[name] = val
+
     @classmethod
     def descriptive_statistics(cls, series: list, name: str | StringEnum):
         """Computes a range of descriptive statistics on a series (min, max, mean, etc.)."""
@@ -75,7 +82,7 @@ class BaseFeatureExtractor(ABC):
         thresholds = [5, 10, 25, 50, 75, 90, 95]
         percentiles = np.percentile(series, thresholds)
         for t, p in zip(thresholds, percentiles):
-            feat_dict[f"p{t}:" + name] = np.percentile(series, p)
+            feat_dict[f"p{t}:" + name] = p
         # feat_dict["median_" + name] = np.median(series)
         # iqr = np.percentile(series, 75) - np.percentile(series, 25)
         # feature_dict["iqr_" + name] = iqr
@@ -95,7 +102,7 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _num_sequences(self) -> dict[str, list]:
-        name = "k"
+        name = "num_seqs"
         feat = len(self._sequences)
         feat_dict = {name: feat}
         return feat_dict
@@ -109,46 +116,61 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _sequence_length(self) -> dict[str, list]:
-        name = "sequence_length"
-        feat = list(map(len, self._sequences))
+        name = "seq_length"
+        feat = [len(seq) for seq in self._sequences]
+        self._set_cached(name, feat)
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
-    @_feature
-    def _sequence_length_ratio(self) -> dict[str, list]:
-        name = "sequence_length_ratio"
-        feat = min(self._sequences._sequence_lengths) / max(
-            self._sequences._sequence_lengths
-        )
-
-        feat_dict = {name: feat}
-        return feat_dict
+    # @_feature
+    # def _sequence_length_ratio(self) -> dict[str, list]:
+    #     name = "seq_length_ratio"
+    #     seq_lengths = [len(seq) for seq in self._sequences]
+    #     feat = min(seq_lengths) / max(seq_lengths)
+    #     feat_dict = {name: feat}
+    #     return feat_dict
 
     @_feature
+    # TODO: probably redundant
     def _lower_bound_gap_percentage(self) -> dict[str, list]:
         name = "lower_bound_gap_percentage"
-        feat = 1 - np.mean(self._sequences._sequence_lengths) / max(
-            self._sequences._sequence_lengths
-        )
-
+        seq_lengths = self._get_cached("seq_length")
+        feat = 1 - np.mean(seq_lengths) / max(seq_lengths)
         feat_dict = {name: feat}
         return feat_dict
 
+    # @_feature
+    # def _sequence_length_taxa_ratio(self) -> dict[str, list]:
+    #     name = "seq_length_taxa_ratio"
+    #     seq_lengths = [len(seq) for seq in self._sequences]
+    #     feat = seq_lengths / len(self._sequences)
+    #     feat_dict = self.descriptive_statistics(feat, name)
+    #     return feat_dict
+
     @_feature
-    def _sequence_length_taxa_ratio(self) -> dict[str, list]:
-        name = "seq_length_taxa_ratio"
-        feat = np.array(self._sequences._sequence_lengths) / len(
-            self._sequences.sequences
-        )
+    def _sequence_entropy(self) -> dict[str, list]:
+        """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
+        eps = 1e-8
+        name = "entropy"
+        dists = self._get_char_distributions()
+        self._set_cached("distributions", dists)
+        dists = dists.clip(eps)
+        feat = -(dists * np.log2(dists)).sum(axis=1)
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
     @_feature
-    def _sequence_shannon_entropy(self) -> dict[str, list]:
+    def _sequence_cross_entropy(self) -> dict[str, list]:
         """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
-        name = "shannon_entropy"
-        feat = list(map(self._compute_sequence_entropy, self._sequences.sequences))
-        feat_dict = self.descriptive_statistics(feat, name)
+        eps = 1e-8
+        name = "cross_entropy"
+        dists = self._get_cached("distributions")
+        dists = self._get_char_distributions()
+        dists = dists.clip(eps)  # k x v --> k x k
+        entros = -np.einsum("ik, jk->ij", dists, np.log2(dists))
+        feat_dict = entros
+        # feat = -(dists * np.log2(dists)).sum(axis=1)
+        # feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
     @_feature
@@ -205,6 +227,10 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
     # # # # # helper methods # # # # #
 
     def _compute_sequence_entropy(self, sequence: SeqIO.SeqRecord) -> float:
+        dists = self._get_char_distributions()
+        if self._get_cached("char_dists") is None:
+            self._set_cached("char_dists", dists)
+
         char_counts = Counter(sequence.seq)
         sequence_length = len(sequence.seq)
         char_probabilities = [
@@ -212,6 +238,34 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
         ]
         entropy = -sum(p * math.log2(p) for p in char_probabilities if p > 0)
         return entropy
+
+    def _get_char_distributions(self):
+        """
+        Given a list of Bio.SeqRecord objects,
+        return a NumPy array of shape (n_seqs, vocab_size),
+        where each row is the symbol distribution for a sequence.
+        """
+        # Extract all unique symbols across all sequences
+        all_symbols = sorted(set("".join(str(rec.seq) for rec in self._sequences)))
+        symbol_to_idx = {symbol: i for i, symbol in enumerate(all_symbols)}
+        vocab_size = len(all_symbols)
+        n_seqs = len(self._sequences)
+
+        # Initialize array to hold distributions
+        distributions = np.zeros((n_seqs, vocab_size), dtype=np.float32)
+
+        # Fill in frequency counts for each sequence
+        for i, rec in enumerate(self._sequences):
+            seq = str(rec.seq)
+            for symbol, count in Counter(rec.seq).items():
+                distributions[i, symbol_to_idx[symbol]] = count
+
+            # Normalize to get probabilities
+            seq_len = len(seq)
+            if seq_len > 0:
+                distributions[i] /= seq_len  # convert to probabilities
+
+        return distributions
 
     def _pairwise_alignments(
         self,
