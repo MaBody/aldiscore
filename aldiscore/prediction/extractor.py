@@ -10,7 +10,8 @@ from Bio import Align, SeqIO
 from Bio.SeqRecord import SeqRecord
 import Bio.SeqRecord
 from abc import ABC
-
+from scipy.spatial.distance import jensenshannon
+import itertools
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
 from aldiscore.enums.enums import DataTypeEnum
@@ -91,7 +92,13 @@ class BaseFeatureExtractor(ABC):
     # # # # # features # # # # #
 
 
-class AlDIFeatureExtractor(BaseFeatureExtractor):
+class FeatureExtractor(BaseFeatureExtractor):
+
+    @_feature
+    def _init_cache(self) -> dict[str, str]:
+        self._cache["seq_length"] = [len(seq) for seq in self._sequences]
+        self._cache["char_dist"] = self._get_char_distributions()
+        return {}
 
     @_feature
     def _data_type(self) -> dict[str, list]:
@@ -117,8 +124,7 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
     @_feature
     def _sequence_length(self) -> dict[str, list]:
         name = "seq_length"
-        feat = [len(seq) for seq in self._sequences]
-        self._set_cached(name, feat)
+        feat = self._cache["seq_length"]
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
@@ -152,77 +158,88 @@ class AlDIFeatureExtractor(BaseFeatureExtractor):
         """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
         eps = 1e-8
         name = "entropy"
-        dists = self._get_char_distributions()
-        self._set_cached("distributions", dists)
+        dists = self._get_cached("char_dist").clip(eps)
         dists = dists.clip(eps)
-        feat = -(dists * np.log2(dists)).sum(axis=1)
+        feat = -(dists * np.log2(dists)).sum(axis=1) / (-np.log2(1 / len(dists)))
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
+    # @_feature
+    # def _sequence_cross_entropy(self) -> dict[str, list]:
+    #     """Computes the {min, max, mean ...} pairwise Cross-Entropy."""
+    #     eps = 1e-8
+    #     name = "cross_entropy"
+    #     dists = self._get_cached("distributions")
+    #     # dists = self._get_char_distributions()  # TODO remove after testing!
+    #     dists = dists.clip(eps)  # k x v --> k x k
+    #     entros = -np.einsum("iv,jv -> ij", dists, np.log2(dists))
+    #     v = dists.shape[1]
+    #     entros = (entros + entros.T) / (2 * -np.log2(1 / v))
+    #     feat = entros[np.tril_indices_from(entros, k=-1)]
+    #     feat_dict = self.descriptive_statistics(feat, name)
+    #     return feat_dict
+
     @_feature
-    def _sequence_cross_entropy(self) -> dict[str, list]:
-        """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
+    def _sequence_js_divergence(self) -> dict[str, list]:
+        """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
-        name = "cross_entropy"
-        dists = self._get_cached("distributions")
-        dists = self._get_char_distributions()
-        dists = dists.clip(eps)  # k x v --> k x k
-        entros = -np.einsum("ik, jk->ij", dists, np.log2(dists))
-        feat_dict = entros
-        # feat = -(dists * np.log2(dists)).sum(axis=1)
-        # feat_dict = self.descriptive_statistics(feat, name)
+        name = "js_divergence"
+        dists = self._get_cached("char_dist").clip(eps)
+        comb_idxs = np.array(list(itertools.combinations(np.arange(len(dists)), r=2))).T
+        feat = jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
+        feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
-    @_feature
-    def _pairwise_features(self) -> dict[str, list]:
-        """Computes a bunch of features based on pairwise alignments of the unaligned sequences.
-        - basic pairwise alignments: penalties = (1, 0, 0, 0)
-        - advanced pairwise alignments: penalties = (2, -0.5, 0, -3) (Chowdhury and Garai, 2017)
-        """
-        penalty_settings = [(1, 0, 0, 0), (2, -0.5, 0, -3)]
-        suffixes = ["_basic", "_advanced"]
-        feat_dict = {}
-        for penalties, suffix in zip(penalty_settings, suffixes):
-            alignments = self._pairwise_alignments(penalties)
+    # @_feature
+    # def _pairwise_features(self) -> dict[str, list]:
+    #     """Computes a bunch of features based on pairwise alignments of the unaligned sequences.
+    #     - basic pairwise alignments: penalties = (1, 0, 0, 0)
+    #     - advanced pairwise alignments: penalties = (2, -0.5, 0, -3) (Chowdhury and Garai, 2017)
+    #     """
+    #     penalty_settings = [(1, 0, 0, 0), (2, -0.5, 0, -3)]
+    #     suffixes = ["_basic", "_advanced"]
+    #     feat_dict = {}
+    #     for penalties, suffix in zip(penalty_settings, suffixes):
+    #         alignments = self._pairwise_alignments(penalties)
 
-            name = "score_ratio" + suffix
-            feat = self._alignment_score_ratio(alignments)
-            feat_dict.update(self.descriptive_statistics(feat, name))
+    #         name = "score_ratio" + suffix
+    #         feat = self._alignment_score_ratio(alignments)
+    #         feat_dict.update(self.descriptive_statistics(feat, name))
 
-            name = "gap_ratio" + suffix
-            feat = self._alignment_gap_ratio(alignments)
-            feat_dict.update(self.descriptive_statistics(feat, name))
+    #         name = "gap_ratio" + suffix
+    #         feat = self._alignment_gap_ratio(alignments)
+    #         feat_dict.update(self.descriptive_statistics(feat, name))
 
-            name = "stretch_ratio" + suffix
-            feat = self._alignment_stretch_ratio(alignments)
-            feat_dict.update(self.descriptive_statistics(feat, name))
+    #         name = "stretch_ratio" + suffix
+    #         feat = self._alignment_stretch_ratio(alignments)
+    #         feat_dict.update(self.descriptive_statistics(feat, name))
 
-            name = "avg_gap_length" + suffix
-            feat = self._average_gap_length(alignments)
-            feat_dict.update(self.descriptive_statistics(feat, name))
-        return feat_dict
+    #         name = "avg_gap_length" + suffix
+    #         feat = self._average_gap_length(alignments)
+    #         feat_dict.update(self.descriptive_statistics(feat, name))
+    #     return feat_dict
 
-    @_feature
-    def _perc_seq_hash_hamming_distance(self) -> dict[str, list]:
-        bit_suffix_lengths = [16]
-        suffixes = ["_16bit"]
-        feat_dict = {}
-        for bit_suffix_length, suffix in zip(bit_suffix_lengths, suffixes):
-            name = "perc_seq_hash_hamming" + suffix
-            feat = self._compute_hamming_distance(bit_suffix_length)
-            feat_dict.update(self.descriptive_statistics(feat, name))
-        return feat_dict
+    # @_feature
+    # def _perc_seq_hash_hamming_distance(self) -> dict[str, list]:
+    #     bit_suffix_lengths = [16]
+    #     suffixes = ["_16bit"]
+    #     feat_dict = {}
+    #     for bit_suffix_length, suffix in zip(bit_suffix_lengths, suffixes):
+    #         name = "perc_seq_hash_hamming" + suffix
+    #         feat = self._compute_hamming_distance(bit_suffix_length)
+    #         feat_dict.update(self.descriptive_statistics(feat, name))
+    #     return feat_dict
 
-    @_feature
-    def _kmer_similarity(self) -> dict[str, list]:
-        kmer_lengths = [5, 10]
-        suffixes = ["_5", "_10"]
-        feat_dict = {}
-        for kmer_length, suffix in zip(kmer_lengths, suffixes):
-            name = "kmer_similarity" + suffix
-            feat = self._compute_kmer_similarity(kmer_length)
-            feat_dict.update(self.descriptive_statistics(feat, name))
-        return feat_dict
+    # @_feature
+    # def _kmer_similarity(self) -> dict[str, list]:
+    #     kmer_lengths = [5, 10]
+    #     suffixes = ["_5", "_10"]
+    #     feat_dict = {}
+    #     for kmer_length, suffix in zip(kmer_lengths, suffixes):
+    #         name = "kmer_similarity" + suffix
+    #         feat = self._compute_kmer_similarity(kmer_length)
+    #         feat_dict.update(self.descriptive_statistics(feat, name))
+    #     return feat_dict
 
     # # # # # helper methods # # # # #
 
