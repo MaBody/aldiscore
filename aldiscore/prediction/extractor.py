@@ -127,13 +127,12 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     feat_dict = {name: feat}
     #     return feat_dict
 
-    # TODO: Already included in FRST features!
-    # @_feature
-    # def _sequence_length(self) -> dict[str, list]:
-    #     name = "seq_length"
-    #     feat = self._cache[self._SEQ_LEN]
-    #     feat_dict = self.descriptive_statistics(feat, name)
-    #     return feat_dict
+    @_feature
+    def _sequence_length(self) -> dict[str, list]:
+        name = "seq_length"
+        feat = self._cache[self._SEQ_LEN]
+        feat_dict = self.descriptive_statistics(feat, name)
+        return feat_dict
 
     # @_feature
     # def _sequence_length_ratio(self) -> dict[str, list]:
@@ -160,16 +159,17 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     feat_dict = self.descriptive_statistics(feat, name)
     #     return feat_dict
 
-    @_feature
-    def _sequence_entropy(self) -> dict[str, list]:
-        """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
-        eps = 1e-8
-        name = "entropy"
-        dists = self._get_cached(self._CHAR_DIST).clip(eps)
-        dists = dists.clip(eps)
-        feat = -(dists * np.log2(dists)).sum(axis=1) / (-np.log2(1 / len(dists)))
-        feat_dict = self.descriptive_statistics(feat, name)
-        return feat_dict
+    # @_feature
+    # TODO: Included in FRST randomness features!
+    # def _sequence_entropy(self) -> dict[str, list]:
+    #     """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
+    #     eps = 1e-8
+    #     name = "entropy"
+    #     dists = self._get_cached(self._CHAR_DIST).clip(eps)
+    #     dists = dists.clip(eps)
+    #     feat = -(dists * np.log2(dists)).sum(axis=1) / (-np.log2(1 / len(dists)))
+    #     feat_dict = self.descriptive_statistics(feat, name)
+    #     return feat_dict
 
     # @_feature
     # def _sequence_cross_entropy(self) -> dict[str, list]:
@@ -209,10 +209,11 @@ class FeatureExtractor(BaseFeatureExtractor):
                 cmd = [ent_path, "-t", tmpfile.name]
                 out = subprocess.run(cmd, capture_output=True).stdout.decode("utf-8")
                 lines = [line.split(",") for line in out.splitlines()]
-                keys = [name + "_" + key for key in lines[0]]
+                keys = [name + "_" + key.lower() for key in lines[0]]
                 # Drop first position (csv index)
                 for key, val in zip(keys[1:], lines[1][1:]):
                     feats[key].append(float(val))
+        del feats[name + "_file-bytes"]  # Redundant, same as sequence length
         feat_dict = {}
         for name, feat in feats.items():
             feat_dict.update(self.descriptive_statistics(feat, name))
