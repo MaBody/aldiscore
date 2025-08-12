@@ -12,10 +12,14 @@ import Bio.SeqRecord
 from abc import ABC
 from scipy.spatial.distance import jensenshannon
 import itertools
+from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
 from aldiscore.enums.enums import DataTypeEnum
 import traceback
+import tempfile
+import subprocess
+from collections import defaultdict
 
 _FEATURE_FLAG = "_is_feature"
 
@@ -93,11 +97,13 @@ class BaseFeatureExtractor(ABC):
 
 
 class FeatureExtractor(BaseFeatureExtractor):
+    _SEQ_LEN = "seq_length"
+    _CHAR_DIST = "char_dist"
 
     @_feature
     def _init_cache(self) -> dict[str, str]:
-        self._cache["seq_length"] = [len(seq) for seq in self._sequences]
-        self._cache["char_dist"] = self._get_char_distributions()
+        self._cache[self._SEQ_LEN] = [len(seq) for seq in self._sequences]
+        self._cache[self._CHAR_DIST] = self._get_char_distributions()
         return {}
 
     @_feature
@@ -121,12 +127,13 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     feat_dict = {name: feat}
     #     return feat_dict
 
-    @_feature
-    def _sequence_length(self) -> dict[str, list]:
-        name = "seq_length"
-        feat = self._cache["seq_length"]
-        feat_dict = self.descriptive_statistics(feat, name)
-        return feat_dict
+    # TODO: Already included in FRST features!
+    # @_feature
+    # def _sequence_length(self) -> dict[str, list]:
+    #     name = "seq_length"
+    #     feat = self._cache[self._SEQ_LEN]
+    #     feat_dict = self.descriptive_statistics(feat, name)
+    #     return feat_dict
 
     # @_feature
     # def _sequence_length_ratio(self) -> dict[str, list]:
@@ -140,7 +147,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     # TODO: probably redundant
     def _lower_bound_gap_percentage(self) -> dict[str, list]:
         name = "lower_bound_gap_percentage"
-        seq_lengths = self._get_cached("seq_length")
+        seq_lengths = self._get_cached(self._SEQ_LEN)
         feat = 1 - np.mean(seq_lengths) / max(seq_lengths)
         feat_dict = {name: feat}
         return feat_dict
@@ -158,7 +165,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
         eps = 1e-8
         name = "entropy"
-        dists = self._get_cached("char_dist").clip(eps)
+        dists = self._get_cached(self._CHAR_DIST).clip(eps)
         dists = dists.clip(eps)
         feat = -(dists * np.log2(dists)).sum(axis=1) / (-np.log2(1 / len(dists)))
         feat_dict = self.descriptive_statistics(feat, name)
@@ -184,10 +191,31 @@ class FeatureExtractor(BaseFeatureExtractor):
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
         name = "js_divergence"
-        dists = self._get_cached("char_dist").clip(eps)
+        dists = self._get_cached(self._CHAR_DIST).clip(eps)
         comb_idxs = np.array(list(itertools.combinations(np.arange(len(dists)), r=2))).T
         feat = jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
         feat_dict = self.descriptive_statistics(feat, name)
+        return feat_dict
+
+    @_feature
+    def _get_ent_features(self):
+        name = "frst"
+        ent_path = get_from_config("tools", "ent")
+        feats = defaultdict(list)
+        with tempfile.NamedTemporaryFile() as tmpfile:
+            for seq in self._sequences:
+                with open(tmpfile.name, "wb") as file:
+                    file.write(str(seq.seq).encode("utf-8"))
+                cmd = [ent_path, "-t", tmpfile.name]
+                out = subprocess.run(cmd, capture_output=True).stdout.decode("utf-8")
+                lines = [line.split(",") for line in out.splitlines()]
+                keys = [name + "_" + key for key in lines[0]]
+                # Drop first position (csv index)
+                for key, val in zip(keys[1:], lines[1][1:]):
+                    feats[key].append(float(val))
+        feat_dict = {}
+        for name, feat in feats.items():
+            feat_dict.update(self.descriptive_statistics(feat, name))
         return feat_dict
 
     # @_feature
@@ -280,7 +308,7 @@ class FeatureExtractor(BaseFeatureExtractor):
             # Normalize to get probabilities
             seq_len = len(seq)
             if seq_len > 0:
-                distributions[i] /= seq_len  # convert to probabilities
+                distributions[i] /= seq_len
 
         return distributions
 
