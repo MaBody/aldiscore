@@ -5,30 +5,31 @@ import numpy as np
 from typing import Literal
 import joblib  # TODO: switch to safer way of model loading
 from pathlib import Path
-import yaml
 import os
 from typing import TYPE_CHECKING
+from aldiscore import get_from_config
 
 if TYPE_CHECKING:
     from sklearn.base import RegressorMixin
     from sklearn.pipeline import Pipeline
 
 
-_ROOT = Path(__file__).parent
-_MODEL_DIR = "models"
+class DifficultyPredictor:
+    _MODEL_DIR = "models"
 
-
-class AlDiPredictor:
-    def __init__(self, model: Literal["latest", "vX.Y"] | Path = "latest"):
+    def __init__(self, model: Pipeline | Literal["latest", "vX.Y"] | Path = "latest"):
         if isinstance(model, Path):
             model_path = model
-        else:
-            model_path = _ROOT / _MODEL_DIR
+            self.model: "Pipeline" = joblib.load(model_path)
+        elif isinstance(model, str):
+            model_path = self._ROOT / self._MODEL_DIR
             file_name = model
             if model == "latest":
-                file_name = yaml.load(open(_ROOT / "config.yaml"))["latest"]
+                file_name = get_from_config("models", model)
             model_path = model_path / file_name
-        self.model: "Pipeline" = joblib.load(model_path)
+            self.model: "Pipeline" = joblib.load(model_path)
+        else:  # Try to use directly
+            self.model = model
 
     def predict(self, sequences: list[SeqRecord]):
         # extract features
@@ -38,8 +39,8 @@ class AlDiPredictor:
         return pred
 
     def store(self, model: "Pipeline", file_name: str):
-        models = os.listdir(_ROOT / _MODEL_DIR)
+        models = os.listdir(self._ROOT / self._MODEL_DIR)
         if file_name in models:
             raise ValueError(f"File '{file_name}' exists already")
         else:
-            joblib.dump(model, _ROOT / _MODEL_DIR / file_name)
+            joblib.dump(model, self._ROOT / self._MODEL_DIR / file_name)
