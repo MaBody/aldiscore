@@ -2,13 +2,14 @@ from pathlib import Path
 import yaml
 import os
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 
 
 def get_from_config(*keys: str, none_ok: bool = False):
-    config = yaml.safe_load(open(ROOT / "config.yaml"))
-    if os.path.exists(ROOT / "config_local.yaml"):
-        config_local = yaml.safe_load(open(ROOT / "config_local.yaml"))
+    conf_dir = ROOT / "configs"
+    config = yaml.safe_load(open(conf_dir / "config.yaml"))
+    if os.path.exists(conf_dir / "config_local.yaml"):
+        config_local = yaml.safe_load(open(conf_dir / "config_local.yaml"))
     else:
         config_local = {}
 
