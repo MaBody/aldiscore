@@ -1,0 +1,6 @@
+models:
+  latest: v0.0.0.pkl
+
+tools:
+  # ent: path/to/ent/binary
+  # raxmlng: path/to/raxmlng/binary
