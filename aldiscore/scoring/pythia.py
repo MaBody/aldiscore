@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from Bio import AlignIO
-
+from aldiscore import get_from_config
 from aldiscore.datastructures.ensemble import Ensemble
 
 
@@ -15,7 +15,9 @@ from aldiscore.datastructures.ensemble import Ensemble
 # def _parse_pythia_msa(alignment: Alignment) -> list[pypythia.msa.MSA]:
 
 
-def compute_pythia_difficulty(ensemble: Ensemble, raxml_path: Path, threads: int = 1):
+def compute_pythia_difficulty(
+    ensemble: Ensemble, raxmlng_path: Path = None, threads: int = 1
+):
     try:
         import pypythia
         import pypythia.predictor
@@ -31,7 +33,12 @@ def compute_pythia_difficulty(ensemble: Ensemble, raxml_path: Path, threads: int
         )
 
     PYTHIA = pypythia.predictor.DifficultyPredictor()
-    RAXMLNG = pypythia.raxmlng.RAxMLNG(raxml_path)
+    if raxmlng_path is None:
+        # Try to read from config files
+        raxmlng_path = get_from_config("tools", "raxmlng")
+        if raxmlng_path is None:
+            raise ValueError("Specify raxmlng path in config or as a parameter!")
+    RAXMLNG = pypythia.raxmlng.RAxMLNG(raxmlng_path)
 
     scores = []
     for alignment in ensemble.alignments:
