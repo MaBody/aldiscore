@@ -11,6 +11,7 @@ from Bio.SeqRecord import SeqRecord
 import Bio.SeqRecord
 from abc import ABC
 from scipy.spatial.distance import jensenshannon
+from scipy.special import kl_div
 import itertools
 from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
@@ -20,14 +21,26 @@ import traceback
 import tempfile
 import subprocess
 from collections import defaultdict
+from time import time
 
 _FEATURE_FLAG = "_is_feature"
+_FUNC_TIME = False
 
 
 def _feature(func):
     """Decorator flag for all functions that compute features."""
-    func._is_feature = True
-    return func
+
+    def wrapper(*args, **kwargs):
+        if _FUNC_TIME:
+            t1 = time()
+            result = func(*args, **kwargs)
+            print(f"{func.__name__}: {time() - t1:.6f}")
+        else:
+            result = func(*args, **kwargs)
+        return result
+
+    wrapper._is_feature = True
+    return wrapper
 
 
 class BaseFeatureExtractor(ABC):
@@ -159,8 +172,8 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     feat_dict = self.descriptive_statistics(feat, name)
     #     return feat_dict
 
+    # # TODO: Included in FRST randomness features!
     # @_feature
-    # TODO: Included in FRST randomness features!
     # def _sequence_entropy(self) -> dict[str, list]:
     #     """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
     #     eps = 1e-8
@@ -193,9 +206,19 @@ class FeatureExtractor(BaseFeatureExtractor):
         name = "js_divergence"
         dists = self._get_cached(self._CHAR_DIST).clip(eps)
         comb_idxs = np.array(list(itertools.combinations(np.arange(len(dists)), r=2))).T
-        feat = jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
-        feat_dict = self.descriptive_statistics(feat, name)
+        # js = jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
+        js = self._jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
+        feat_dict = self.descriptive_statistics(js, name)
         return feat_dict
+
+    def _jensenshannon(self, p, q, axis):
+        p = p / np.sum(p, axis=axis, keepdims=True)
+        q = q / np.sum(q, axis=axis, keepdims=True)
+        m = (p + q) / 2
+        left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
+        right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
+        js = np.sqrt((left + right) / 2)
+        return js
 
     @_feature
     def _get_ent_features(self):
