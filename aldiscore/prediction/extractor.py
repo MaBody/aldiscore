@@ -22,16 +22,18 @@ import tempfile
 import subprocess
 from collections import defaultdict
 from time import time
+import parasail
+
 
 _FEATURE_FLAG = "_is_feature"
-_FUNC_TIME = False
+_LOG_TIME = False
 
 
 def _feature(func):
     """Decorator flag for all functions that compute features."""
 
     def wrapper(*args, **kwargs):
-        if _FUNC_TIME:
+        if _LOG_TIME:
             t1 = time()
             result = func(*args, **kwargs)
             print(f"{func.__name__}: {time() - t1:.6f}")
@@ -112,17 +114,21 @@ class BaseFeatureExtractor(ABC):
 class FeatureExtractor(BaseFeatureExtractor):
     _SEQ_LEN = "seq_length"
     _CHAR_DIST = "char_dist"
+    _PSA = "psa"
+    _DTYPE = "dtype"
 
     @_feature
     def _init_cache(self) -> dict[str, str]:
         self._cache[self._SEQ_LEN] = [len(seq) for seq in self._sequences]
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
+        self._cache[self._PSA] = self._get_pairwise_alignments()
+        self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
         return {}
 
     @_feature
     def _data_type(self) -> dict[str, list]:
         name = "is_dna"
-        feat = infer_data_type(self._sequences) == DataTypeEnum.DNA
+        feat = self._cache[self._DTYPE].upper() == "DNA"
         feat_dict = {name: feat}
         return feat_dict
 
@@ -210,15 +216,6 @@ class FeatureExtractor(BaseFeatureExtractor):
         js = self._jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
         feat_dict = self.descriptive_statistics(js, name)
         return feat_dict
-
-    def _jensenshannon(self, p, q, axis):
-        p = p / np.sum(p, axis=axis, keepdims=True)
-        q = q / np.sum(q, axis=axis, keepdims=True)
-        m = (p + q) / 2
-        left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
-        right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
-        js = np.sqrt((left + right) / 2)
-        return js
 
     @_feature
     def _get_ent_features(self):
@@ -336,7 +333,44 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         return distributions
 
-    def _pairwise_alignments(
+    def _jensenshannon(self, p, q, axis):
+        p = p / np.sum(p, axis=axis, keepdims=True)
+        q = q / np.sum(q, axis=axis, keepdims=True)
+        m = (p + q) / 2
+        left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
+        right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
+        js = np.sqrt((left + right) / 2)
+        return js
+
+    def _get_pairwise_alignments(self):
+        OP, EP = (4, 2)
+        AL_MAT = parasail.dnafull
+        MAX_NUM_PSA = 1000
+
+        # Compute sets of pairwise alignments
+        seq_pairs = list(itertools.combinations(range(len(self._sequences)), r=2))
+        if len(seq_pairs) > MAX_NUM_PSA:
+            seq_pairs = random.sample(seq_pairs, k=MAX_NUM_PSA)
+
+        alignments = {}
+        for seq_pair in seq_pairs:
+            al = parasail.nw_trace_striped_16(
+                str(self._sequences[seq_pair[0]].seq),
+                str(self._sequences[seq_pair[1]].seq),
+                OP,
+                EP,
+                AL_MAT,
+            )
+            al_arr = np.array(
+                [
+                    [*map(ord, al.traceback.query.upper())],
+                    [*map(ord, al.traceback.ref.upper())],
+                ]
+            )
+            alignments[seq_pair].append(al_arr)
+        return alignments
+
+    def _pairwise_alignments_old(
         self,
         penalties: Tuple[float, float, float, float] = (1, 0, 0, 0),
         seed: int = 0,
@@ -443,53 +477,53 @@ class FeatureExtractor(BaseFeatureExtractor):
         else:
             return 0
 
-    def _compute_hamming_distance(self, hash_size: Optional[int] = 16) -> list:
-        """
-        Computes the average perceptual hash hamming distance between all pairs of sequences in `sequences`.
-        See the `sequence_perceptual_hash` function in `utils.py` for details on perceptual hashing.
+    # def _compute_hamming_distance(self, hash_size: Optional[int] = 16) -> list:
+    #     """
+    #     Computes the average perceptual hash hamming distance between all pairs of sequences in `sequences`.
+    #     See the `sequence_perceptual_hash` function in `utils.py` for details on perceptual hashing.
 
-        Parameters
-        ----------
-        hash_size : int, default=16
-            Length of the hash to compute and compare. The default length is 16.
+    #     Parameters
+    #     ----------
+    #     hash_size : int, default=16
+    #         Length of the hash to compute and compare. The default length is 16.
 
-        Returns
-        -------
-        distances
-            The distances between the perceptual hashes of all pairs of sequences.
-        """
-        distances = []
-        sequences = SeqIO.parse(self._sequences.file_path, format="fasta")
-        for seq1, seq2 in itertools.combinations(sequences, r=2):
-            h1 = sequence_perceptual_hash(
-                seq1.seq, self._sequences.data_type, hash_size
-            )
-            h2 = sequence_perceptual_hash(
-                seq2.seq, self._sequences.data_type, hash_size
-            )
-            dist = normalized_hamming_dist(h1, h2)
-            distances.append(dist)
-        return distances
+    #     Returns
+    #     -------
+    #     distances
+    #         The distances between the perceptual hashes of all pairs of sequences.
+    #     """
+    #     distances = []
+    #     sequences = SeqIO.parse(self._sequences.file_path, format="fasta")
+    #     for seq1, seq2 in itertools.combinations(sequences, r=2):
+    #         h1 = sequence_perceptual_hash(
+    #             seq1.seq, self._sequences.data_type, hash_size
+    #         )
+    #         h2 = sequence_perceptual_hash(
+    #             seq2.seq, self._sequences.data_type, hash_size
+    #         )
+    #         dist = normalized_hamming_dist(h1, h2)
+    #         distances.append(dist)
+    #     return distances
 
-    def _compute_kmer_similarity(
-        self, k: int, n_kmers: int = 1000, seed: int = 0
-    ) -> list:
-        if min(self._sequences._sequence_lengths) < k:
-            return np.nan
+    # def _compute_kmer_similarity(
+    #     self, k: int, n_kmers: int = 1000, seed: int = 0
+    # ) -> list:
+    #     if min(self._sequences._sequence_lengths) < k:
+    #         return np.nan
 
-        random.seed(seed)
-        n_sequences = len(self._sequences.sequences)
-        frequencies = []
-        for _ in range(n_kmers):
-            # 1. choose a random sequence
-            reference_sequence = random.choice(self._sequences.sequences).seq
-            # 2. choose a random k-mer of length k
-            start_idx = random.randint(0, len(reference_sequence) - k)
-            kmer = reference_sequence[start_idx : start_idx + k]
-            # 3. Count how many other sequences contain this k-mer
-            num_contains_kmer = len(
-                [seq for seq in self._sequences.sequences if kmer in seq.seq]
-            )
-            frequencies.append((num_contains_kmer - 1) / (n_sequences - 1))
+    #     random.seed(seed)
+    #     n_sequences = len(self._sequences.sequences)
+    #     frequencies = []
+    #     for _ in range(n_kmers):
+    #         # 1. choose a random sequence
+    #         reference_sequence = random.choice(self._sequences.sequences).seq
+    #         # 2. choose a random k-mer of length k
+    #         start_idx = random.randint(0, len(reference_sequence) - k)
+    #         kmer = reference_sequence[start_idx : start_idx + k]
+    #         # 3. Count how many other sequences contain this k-mer
+    #         num_contains_kmer = len(
+    #             [seq for seq in self._sequences.sequences if kmer in seq.seq]
+    #         )
+    #         frequencies.append((num_contains_kmer - 1) / (n_sequences - 1))
 
-        return frequencies
+    #     return frequencies
