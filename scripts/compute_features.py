@@ -26,18 +26,21 @@ if __name__ == "__main__":
 
     data_dir = Path("/hits/fast/cme/bodynems/data/paper")
     sources = os.listdir(data_dir)
-    # sources = ["ox"]
+    # sources = ["treebase_v1"]
     print(f"Computing for sources: {sources}")
 
-    cpu_count = multiprocessing.cpu_count()
-    print("CPUs:", cpu_count)
+    print("Detected CPUs:", multiprocessing.cpu_count())
+    cpu_count = multiprocessing.cpu_count() - 2
+    # cpu_count = 150
+    # print(f"[WARNING]: reducing CPU count to {cpu_count}")
+    print("Used CPUs:", cpu_count)
 
     for source in sources:
         datasets = get_dirs(data_dir / source)
         feats_dict = {}
 
         process_func = partial(process_dataset, data_dir=data_dir, source=source)
-        with multiprocessing.Pool(cpu_count - 2) as pool:
+        with multiprocessing.Pool(cpu_count) as pool:
             print(f"[SOURCE] {source}")
             for out in tqdm(pool.imap_unordered(process_func, datasets)):
                 feats_dict.update(out)
