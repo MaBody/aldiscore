@@ -236,10 +236,12 @@ class FeatureExtractor(BaseFeatureExtractor):
                 cmd = [ent_path, "-t", tmpfile.name]
                 out = subprocess.run(cmd, capture_output=True).stdout.decode("utf-8")
                 lines = [line.split(",") for line in out.splitlines()]
-                keys = [name + "_" + key.lower() for key in lines[0]]
+                keys = [name + "_" + key.strip().lower() for key in lines[0]]
                 # Drop first position (csv index)
                 for key, val in zip(keys[1:], lines[1][1:]):
-                    feats[key].append(float(val))
+                    if key.endswith("monte-carlo-pi"):
+                        continue
+                    feats[key].append(float(val.strip()))
         del feats[name + "_file-bytes"]  # Redundant, same as sequence length
         feat_dict = {}
         for name, feat in feats.items():
