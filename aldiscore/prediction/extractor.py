@@ -139,7 +139,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 1000
+        config["MAX_COUNT"] = 1000  # TODO: make dynamic (depending on data size)
         return config
 
     def _init_cache(self) -> dict[str, str]:
@@ -277,15 +277,18 @@ class FeatureExtractor(BaseFeatureExtractor):
         groups = self._get_cached(self._PSA_GROUPS)
         index_map = self._get_cached(self._PSA_INDEX_MAP)
         scores = defaultdict(list)
+        # Loop over groups of n sequences (usually n=3 due to computational constraints)
         for group in groups:
             nums = []
             denoms = []
+            # Loop over all pairwise combinations (without replacement)
             for idx_pair in itertools.product(group, group):
                 idx_a, idx_c = idx_pair
                 if idx_a == idx_c:
                     continue
                 pos_ac = index_map[idx_a][idx_c]
                 others = set(group).difference(idx_pair)
+                # Loop over all remaining n-2 indices (usually only 1)
                 for idx_b in others:
                     pos_ab = index_map[idx_a][idx_b]
                     pos_bc = index_map[idx_b][idx_c]
@@ -418,6 +421,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         n = len(self._sequences)
         seq_tuples = list(itertools.combinations(range(n), r=GROUP_SIZE))
         if len(seq_tuples) > max_num_groups:
+            # TODO: make sampling more robust (e.g. uniform may miss outlier sequences)
             seq_tuples = random.sample(seq_tuples, k=max_num_groups)
 
         # print(f"Computing {len(seq_tuples)} PSA groups")

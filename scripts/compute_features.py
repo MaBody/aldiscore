@@ -26,13 +26,13 @@ if __name__ == "__main__":
 
     data_dir = Path("/hits/fast/cme/bodynems/data/paper")
     sources = os.listdir(data_dir)
+    # sources.remove("treebase_v1")
     # sources = ["treebase_v1"]
     print(f"Computing for sources: {sources}")
 
     print("Detected CPUs:", multiprocessing.cpu_count())
     cpu_count = multiprocessing.cpu_count() - 2
     # cpu_count = 150
-    # print(f"[WARNING]: reducing CPU count to {cpu_count}")
     print("Used CPUs:", cpu_count)
 
     for source in sources:
