@@ -16,7 +16,7 @@ import itertools
 from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
-from aldiscore.enums.enums import DataTypeEnum
+from aldiscore.constants.constants import GAP_CHAR, GAP_CODE
 import traceback
 import tempfile
 import subprocess
@@ -115,14 +115,21 @@ class FeatureExtractor(BaseFeatureExtractor):
     _SEQ_LEN = "seq_length"
     _CHAR_DIST = "char_dist"
     _PSA = "psa"
+    _PSA_GROUPS = "psa_groups"
+    _PSA_INDEX_MAP = "psa_index_map"
     _DTYPE = "dtype"
 
     @_feature
     def _init_cache(self) -> dict[str, str]:
+        self._cache.clear()
+        self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
         self._cache[self._SEQ_LEN] = [len(seq) for seq in self._sequences]
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
-        self._cache[self._PSA] = self._get_pairwise_alignments()
-        self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
+
+        alignments, groupings = self._get_pairwise_alignments()
+        self._cache[self._PSA] = alignments
+        self._cache[self._PSA_GROUPS] = groupings
+        self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
         return {}
 
     @_feature
@@ -218,7 +225,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _get_ent_features(self):
+    def _ent_randomness(self):
         name = "frst"
         ent_path = get_from_config("tools", "ent")
         feats = defaultdict(list)
@@ -237,6 +244,40 @@ class FeatureExtractor(BaseFeatureExtractor):
         feat_dict = {}
         for name, feat in feats.items():
             feat_dict.update(self.descriptive_statistics(feat, name))
+        return feat_dict
+
+    @_feature
+    def _transitive_consistency(self) -> dict[str, list]:
+        """Computes measures of transitive consistency on the PSA groups."""
+        name = "tc"
+        groups = self._get_cached(self._PSA_GROUPS)
+        index_map = self._get_cached(self._PSA_INDEX_MAP)
+        scores = defaultdict(list)
+        for group in groups:
+            nums = []
+            denoms = []
+            for idx_pair in itertools.product(group, group):
+                idx_a, idx_c = idx_pair
+                if idx_a == idx_c:
+                    continue
+                pos_ac = index_map[idx_a][idx_c]
+                others = set(group).difference(idx_pair)
+                for idx_b in others:
+                    pos_ab = index_map[idx_a][idx_b]
+                    pos_bc = index_map[idx_b][idx_c]
+                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
+                    nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
+                    denoms.append(np.sum(mask))
+            group_scores = np.array(nums) / np.array(denoms)
+            # TODO: Weighted average would be better to avoid bias toward shorter seqs!
+            # scores[group] = np.average(group_scores, weights=denoms)
+            scores[name + "_min"].append(group_scores.min())
+            scores[name + "_mean"].append(group_scores.mean())
+            scores[name + "_max"].append(group_scores.max())
+
+        feat_dict = {}
+        for tag in scores:
+            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
         return feat_dict
 
     # @_feature
@@ -345,30 +386,55 @@ class FeatureExtractor(BaseFeatureExtractor):
     def _get_pairwise_alignments(self):
         OP, EP = (4, 2)
         AL_MAT = parasail.dnafull
-        MAX_NUM_PSA = 1000
-
+        MAX_NUM_GROUPS = 20
         # Compute sets of pairwise alignments
-        seq_pairs = list(itertools.combinations(range(len(self._sequences)), r=2))
-        if len(seq_pairs) > MAX_NUM_PSA:
-            seq_pairs = random.sample(seq_pairs, k=MAX_NUM_PSA)
+        seq_tuples = list(itertools.combinations(range(len(self._sequences)), r=3))
+        if len(seq_tuples) > MAX_NUM_GROUPS:
+            seq_tuples = random.sample(seq_tuples, k=MAX_NUM_GROUPS)
 
-        alignments = {}
-        for seq_pair in seq_pairs:
-            al = parasail.nw_trace_striped_16(
-                str(self._sequences[seq_pair[0]].seq),
-                str(self._sequences[seq_pair[1]].seq),
-                OP,
-                EP,
-                AL_MAT,
-            )
-            al_arr = np.array(
-                [
-                    [*map(ord, al.traceback.query.upper())],
-                    [*map(ord, al.traceback.ref.upper())],
-                ]
-            )
-            alignments[seq_pair].append(al_arr)
-        return alignments
+        alignments = defaultdict(dict)
+        groupings = []
+        for seq_tuple in seq_tuples:
+            groupings.append(seq_tuple)
+            for combi in itertools.combinations(seq_tuple, r=2):
+                idx_q, idx_r = combi
+                if (idx_q in alignments) and (idx_r in alignments[idx_q]):
+                    continue
+                al = parasail.nw_trace_striped_16(
+                    str(self._sequences[idx_q].seq),
+                    str(self._sequences[idx_r].seq),
+                    OP,
+                    EP,
+                    AL_MAT,
+                )
+                # al_arr = np.array(
+                #     [
+                #         [*map(ord, al.traceback.query.upper())],
+                #         [*map(ord, al.traceback.ref.upper())],
+                #     ]
+                # )
+                alignments[idx_q][idx_r] = np.array([*map(ord, al.traceback.query)])
+                alignments[idx_r][idx_q] = np.array([*map(ord, al.traceback.ref)])
+        return alignments, groupings
+
+    def _get_psa_index_map(self):
+        GAP_ORD = ord(GAP_CHAR)
+        index_map = defaultdict(dict)
+        for group in self._cache[self._PSA_GROUPS]:
+            for idx_a, idx_b in itertools.product(group, group):
+                duplicate_idx = idx_a == idx_b
+                done = (idx_a in index_map) and (idx_b in index_map[idx_a])
+                if duplicate_idx or done:
+                    continue
+                al_a = self._cache[self._PSA][idx_a][idx_b]
+                al_b = self._cache[self._PSA][idx_b][idx_a]
+
+                # vector with positional indices in b with respect to those in a
+                positions = np.cumsum(al_b != GAP_ORD).astype(np.int32) - 1
+                positions[al_b == GAP_ORD] = GAP_CODE
+                positions = positions[al_a != GAP_ORD]
+                index_map[idx_a][idx_b] = positions
+        return index_map
 
     def _pairwise_alignments_old(
         self,
