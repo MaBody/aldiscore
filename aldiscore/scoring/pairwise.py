@@ -11,7 +11,7 @@ from abc import ABC
 from aldiscore.scoring import utils
 from aldiscore.scoring import encoding
 from aldiscore.enums.enums import FeatureEnum as FE, PositionalEncodingEnum
-from aldiscore.constants.constants import GAP_CONST, GAP_CHAR
+from aldiscore.constants.constants import GAP_CODE, GAP_CHAR
 from aldiscore.datastructures.ensemble import Ensemble
 from aldiscore.datastructures.alignment import Alignment
 from typing import Literal
@@ -275,7 +275,7 @@ class _HomologySetMetric(_Metric):
             hcols_list, gap_mask_list = [], []
             for k in range(K):
                 hcols_list.append(np.delete(A_code[:, Q[k]], k, axis=0))
-                gap_mask_list.append(hcols_list[-1] != GAP_CONST)
+                gap_mask_list.append(hcols_list[-1] != GAP_CODE)
             return hcols_list, gap_mask_list
 
         hcols_x_list, gap_mask_x_list = self._get_from_cache(self._key_x, from_scratch)

@@ -5,7 +5,7 @@ DNA_CHARS = np.array(list("ACGT"))
 AA_CHARS = np.array(list("ACDEFGHIKLMNPQRSTVWY"))
 
 GAP_CHAR = "-"
-GAP_CONST = -1
+GAP_CODE = -1
 
 
 DNA_CHAR_MAP = defaultdict(lambda: 0, {"A": 63, "C": 127, "G": 191, "T": 255})

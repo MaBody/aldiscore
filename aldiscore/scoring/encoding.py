@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from aldiscore.enums.enums import PositionalEncodingEnum
-from aldiscore.constants.constants import GAP_CHAR, GAP_CONST
+from aldiscore.constants.constants import GAP_CHAR, GAP_CODE
 
 
 def gapped_index_mapping(A: np.ndarray, dtype: np.dtype = np.int32):
@@ -83,7 +83,7 @@ def encode_positions(
         case PositionalEncodingEnum.RAW:
             code_func = np.vectorize(ord)
             site_codes = code_func(A)
-            site_codes[A == GAP_CHAR] = GAP_CONST
+            site_codes[A == GAP_CHAR] = GAP_CODE
             site_codes = site_codes.astype(int_dtype)
             return site_codes
 
