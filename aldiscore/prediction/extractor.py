@@ -49,6 +49,10 @@ class BaseFeatureExtractor(ABC):
     """Base class for a feature extractor."""
 
     def __init__(self, sequences: list[SeqRecord]):
+
+        if len(sequences) < 3:
+            print(f"WARNING: Number of sequences must be larger than 2!")
+
         self._sequences = sequences
         self._cache = {}
 
@@ -119,18 +123,36 @@ class FeatureExtractor(BaseFeatureExtractor):
     _PSA_INDEX_MAP = "psa_index_map"
     _DTYPE = "dtype"
 
-    @_feature
+    def __init__(self, sequences: list[SeqRecord], psa_config: dict = None):
+        super().__init__(sequences)
+
+        config = self._init_psa_config()
+        if psa_config is None:
+            psa_config = {}
+        config["DNA"].update(psa_config.get("DNA", {}))
+        config["AA"].update(psa_config.get("AA", {}))
+        self._psa_config = config
+
+        self._init_cache()
+
+    def _init_psa_config(self) -> dict[str, dict]:
+        config = {}
+        config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
+        config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
+        config["MAX_COUNT"] = 1000
+        return config
+
     def _init_cache(self) -> dict[str, str]:
         self._cache.clear()
         self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
         self._cache[self._SEQ_LEN] = [len(seq) for seq in self._sequences]
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
-
         alignments, groupings = self._get_pairwise_alignments()
         self._cache[self._PSA] = alignments
         self._cache[self._PSA_GROUPS] = groupings
         self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
-        return {}
+
+    # --------------- FEATURES -----------------
 
     @_feature
     def _data_type(self) -> dict[str, list]:
@@ -268,8 +290,10 @@ class FeatureExtractor(BaseFeatureExtractor):
                     pos_ab = index_map[idx_a][idx_b]
                     pos_bc = index_map[idx_b][idx_c]
                     mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
-                    nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
-                    denoms.append(np.sum(mask))
+                    denom = np.sum(mask)
+                    if denom > 0:
+                        nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
+                        denoms.append(denom)
             group_scores = np.array(nums) / np.array(denoms)
             # TODO: Weighted average would be better to avoid bias toward shorter seqs!
             # scores[group] = np.average(group_scores, weights=denoms)
@@ -336,9 +360,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     # # # # # helper methods # # # # #
 
     def _compute_sequence_entropy(self, sequence: SeqIO.SeqRecord) -> float:
-        dists = self._get_char_distributions()
-        if self._get_cached("char_dists") is None:
-            self._set_cached("char_dists", dists)
+        dists = self._get_cached(self._CHAR_DIST)
 
         char_counts = Counter(sequence.seq)
         sequence_length = len(sequence.seq)
@@ -386,13 +408,19 @@ class FeatureExtractor(BaseFeatureExtractor):
         return js
 
     def _get_pairwise_alignments(self):
-        OP, EP = (4, 2)
-        AL_MAT = parasail.dnafull
-        MAX_NUM_GROUPS = 20
+        GROUP_SIZE = 3
+        datatype = self._cache[self._DTYPE]
+        al_mat = self._psa_config[datatype]["matrix"]
+        op = self._psa_config[datatype]["op"]
+        ep = self._psa_config[datatype]["ep"]
+        max_num_groups = self._psa_config["MAX_COUNT"] // GROUP_SIZE
         # Compute sets of pairwise alignments
-        seq_tuples = list(itertools.combinations(range(len(self._sequences)), r=3))
-        if len(seq_tuples) > MAX_NUM_GROUPS:
-            seq_tuples = random.sample(seq_tuples, k=MAX_NUM_GROUPS)
+        n = len(self._sequences)
+        seq_tuples = list(itertools.combinations(range(n), r=GROUP_SIZE))
+        if len(seq_tuples) > max_num_groups:
+            seq_tuples = random.sample(seq_tuples, k=max_num_groups)
+
+        # print(f"Computing {len(seq_tuples)} PSA groups")
 
         alignments = defaultdict(dict)
         groupings = []
@@ -402,12 +430,12 @@ class FeatureExtractor(BaseFeatureExtractor):
                 idx_q, idx_r = combi
                 if (idx_q in alignments) and (idx_r in alignments[idx_q]):
                     continue
-                al = parasail.nw_trace_striped_16(
+                al = parasail.nw_trace_scan(
                     str(self._sequences[idx_q].seq),
                     str(self._sequences[idx_r].seq),
-                    OP,
-                    EP,
-                    AL_MAT,
+                    op,
+                    ep,
+                    al_mat,
                 )
                 # al_arr = np.array(
                 #     [
