@@ -1,6 +1,7 @@
 import itertools
 import math
-import pathlib
+from pathlib import Path
+import datetime
 import random
 import pandas as pd
 import numpy as np
@@ -17,38 +18,38 @@ from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
 from aldiscore.constants.constants import GAP_CHAR, GAP_CODE
+import aldiscore.prediction.utils as utils
 import traceback
 import tempfile
 import subprocess
 from collections import defaultdict
-from time import time
+from time import perf_counter
 import parasail
 
-
 _FEATURE_FLAG = "_is_feature"
-_LOG_TIME = False
+_LOG_TIME = True
 
 
 def _feature(func):
     """Decorator flag for all functions that compute features."""
 
     def wrapper(*args, **kwargs):
-        if _LOG_TIME:
-            t1 = time()
-            result = func(*args, **kwargs)
-            print(f"{func.__name__}: {time() - t1:.6f}")
-        else:
-            result = func(*args, **kwargs)
+        result = func(*args, **kwargs)
         return result
 
     wrapper._is_feature = True
+    wrapper._name = func.__name__
     return wrapper
 
 
 class BaseFeatureExtractor(ABC):
     """Base class for a feature extractor."""
 
-    def __init__(self, sequences: list[SeqRecord]):
+    def __init__(
+        self,
+        sequences: list[SeqRecord],
+        track_perf: bool = False,
+    ):
 
         if len(sequences) < 3:
             print(f"WARNING: Number of sequences must be larger than 2!")
@@ -56,10 +57,14 @@ class BaseFeatureExtractor(ABC):
         self._sequences = sequences
         self._cache = {}
 
+        self._track_perf = track_perf
+
     def compute(self, exclude: list = None):
         "Runs all functions with the @_feature decorator and concatenates the output."
 
         features_dict = {}
+        if self._track_perf:
+            self._perf_dict = {}
         feature_funcs = self._get_feature_funcs()
         if exclude is not None:
             feature_funcs = list(
@@ -67,13 +72,20 @@ class BaseFeatureExtractor(ABC):
             )
         for feature_func in feature_funcs:
             try:
-                feature_dict = feature_func()
+                if self._track_perf:
+                    t1 = perf_counter()
+                    feature_dict = feature_func()
+                    t2 = perf_counter()
+                    # Wrapper has custom attribute _name
+                    self._perf_dict[feature_func._name] = t2 - t1
+                else:
+                    feature_dict = feature_func()
                 assert isinstance(feature_dict, dict)
                 features_dict.update(feature_dict)
-            except Exception as e:
-                raise ValueError(
-                    f"Problem with feature {feature_func}", e, traceback.format_exc()
-                )
+            except Exception:
+                traceback.print_exc()
+                raise ValueError(f"Problem with feature {feature_func}")
+
         features = pd.DataFrame(features_dict, index=[0])  # Contains a single row
         return features
 
@@ -122,9 +134,15 @@ class FeatureExtractor(BaseFeatureExtractor):
     _PSA_GROUPS = "psa_groups"
     _PSA_INDEX_MAP = "psa_index_map"
     _DTYPE = "dtype"
+    _INT_TYPE = "int_type"
 
-    def __init__(self, sequences: list[SeqRecord], psa_config: dict = None):
-        super().__init__(sequences)
+    def __init__(
+        self,
+        sequences: list[SeqRecord],
+        psa_config: dict = None,
+        track_perf: bool = False,
+    ):
+        super().__init__(sequences, track_perf)
 
         config = self._init_psa_config()
         if psa_config is None:
@@ -142,15 +160,21 @@ class FeatureExtractor(BaseFeatureExtractor):
         config["MAX_COUNT"] = 1000  # TODO: make dynamic (depending on data size)
         return config
 
+    @_feature
     def _init_cache(self) -> dict[str, str]:
         self._cache.clear()
         self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
         self._cache[self._SEQ_LEN] = [len(seq) for seq in self._sequences]
+
+        will_overflow = max(self._cache[self._SEQ_LEN]) >= 2**15
+        self._cache[self._INT_TYPE] = np.int32 if will_overflow else np.int16
+
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
         alignments, groupings = self._get_pairwise_alignments()
         self._cache[self._PSA] = alignments
         self._cache[self._PSA_GROUPS] = groupings
         self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
+        return {}
 
     # --------------- FEATURES -----------------
 
@@ -247,7 +271,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _ent_randomness(self):
+    def _ent_randomness(self) -> dict[str, list]:
         name = "frst"
         ent_path = get_from_config("tools", "ent")
         feats = defaultdict(list)
@@ -270,10 +294,22 @@ class FeatureExtractor(BaseFeatureExtractor):
             feat_dict.update(self.descriptive_statistics(feat, name))
         return feat_dict
 
+    # @_feature
+    # def _psa_basic_features(self) -> dict[str, list]:
+    #     """Computes measures of transitive consistency on the PSA groups."""
+    #     name = "basic"
+    #     similarity_func = lambda x, y: np.sum(x == y) / len(x)
+    #     scores = self._compute_consistency(name, similarity_func)
+
+    #     feat_dict = {}
+    #     for tag in scores:
+    #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
+    #     return feat_dict
+
     @_feature
     def _transitive_consistency(self) -> dict[str, list]:
         """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc"
+        name = "tc_base"
         similarity_func = lambda x, y: np.sum(x == y) / len(x)
         scores = self._compute_consistency(name, similarity_func)
 
@@ -285,7 +321,19 @@ class FeatureExtractor(BaseFeatureExtractor):
     @_feature
     def _transitive_consistency_dist(self) -> dict[str, list]:
         """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_dist"
+        name = "tc_dist_abs"
+        similarity_func = lambda x, y: np.linalg.norm(x - y)
+        scores = self._compute_consistency(name, similarity_func)
+        feat_dict = {}
+        max_len = max(self._get_cached(self._SEQ_LEN))
+        for tag in scores:
+            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
+        return feat_dict
+
+    @_feature
+    def _transitive_consistency_dist_scaled(self) -> dict[str, list]:
+        """Computes measures of transitive consistency on the PSA groups."""
+        name = "tc_dist_scaled"
         similarity_func = lambda x, y: np.linalg.norm(x - y)
         scores = self._compute_consistency(name, similarity_func)
         feat_dict = {}
@@ -293,6 +341,141 @@ class FeatureExtractor(BaseFeatureExtractor):
         for tag in scores:
             scaled = np.array(scores[tag]) / max_len
             feat_dict.update(self.descriptive_statistics(scaled, tag))
+        return feat_dict
+
+    @_feature
+    def _transitive_consistency_dist_log(self) -> dict[str, list]:
+        """Computes measures of transitive consistency on the PSA groups."""
+        name = "tc_dist_log"
+        similarity_func = lambda x, y: np.log2(np.linalg.norm(x - y) + 1)
+        scores = self._compute_consistency(name, similarity_func)
+        feat_dict = {}
+        max_len = max(self._get_cached(self._SEQ_LEN))
+        for tag in scores:
+            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
+        return feat_dict
+
+    @_feature
+    def _transitive_consistency_50(self) -> dict[str, list]:
+        """Computes measures of transitive consistency on the PSA groups."""
+        name = "tc_50"
+        similarity_func = lambda x, y: np.sum(x == y) / len(x)
+        scores = defaultdict(dict)
+        groups = self._get_cached(self._PSA_GROUPS)
+        index_map = self._get_cached(self._PSA_INDEX_MAP)
+
+        scores = defaultdict(list)
+        # Loop over groups of n sequences (usually n=3 due to computational constraints)
+        for group in groups[:50]:
+            group_scores = []
+            # Loop over all pairwise combinations (with replacement)
+            for idx_pair in itertools.product(group, group):
+                idx_a, idx_c = idx_pair
+                if idx_a == idx_c:
+                    continue
+                pos_ac = index_map[idx_a][idx_c]
+                others = set(group).difference(idx_pair)
+                # Loop over all remaining n-2 indices (usually only 1)
+                for idx_b in others:
+                    pos_ab = index_map[idx_a][idx_b]
+                    pos_bc = index_map[idx_b][idx_c]
+                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
+                    denom = np.sum(mask)
+                    if denom > 0:
+                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
+                        group_scores.append(
+                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
+                        )
+            group_scores = np.array(group_scores)
+            scores[name + "_min"].append(group_scores.min())
+            scores[name + "_mean"].append(group_scores.mean())
+            scores[name + "_max"].append(group_scores.max())
+
+        feat_dict = {}
+        for tag in scores:
+            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
+        return feat_dict
+
+    @_feature
+    def _transitive_consistency_100(self) -> dict[str, list]:
+        """Computes measures of transitive consistency on the PSA groups."""
+        name = "tc_100"
+        similarity_func = lambda x, y: np.sum(x == y) / len(x)
+        scores = defaultdict(dict)
+        groups = self._get_cached(self._PSA_GROUPS)
+        index_map = self._get_cached(self._PSA_INDEX_MAP)
+
+        scores = defaultdict(list)
+        # Loop over groups of n sequences (usually n=3 due to computational constraints)
+        for group in groups[:100]:
+            group_scores = []
+            # Loop over all pairwise combinations (with replacement)
+            for idx_pair in itertools.product(group, group):
+                idx_a, idx_c = idx_pair
+                if idx_a == idx_c:
+                    continue
+                pos_ac = index_map[idx_a][idx_c]
+                others = set(group).difference(idx_pair)
+                # Loop over all remaining n-2 indices (usually only 1)
+                for idx_b in others:
+                    pos_ab = index_map[idx_a][idx_b]
+                    pos_bc = index_map[idx_b][idx_c]
+                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
+                    denom = np.sum(mask)
+                    if denom > 0:
+                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
+                        group_scores.append(
+                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
+                        )
+            group_scores = np.array(group_scores)
+            scores[name + "_min"].append(group_scores.min())
+            scores[name + "_mean"].append(group_scores.mean())
+            scores[name + "_max"].append(group_scores.max())
+
+        feat_dict = {}
+        for tag in scores:
+            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
+        return feat_dict
+
+    @_feature
+    def _transitive_consistency_200(self) -> dict[str, list]:
+        """Computes measures of transitive consistency on the PSA groups."""
+        name = "tc_200"
+        similarity_func = lambda x, y: np.sum(x == y) / len(x)
+        scores = defaultdict(dict)
+        groups = self._get_cached(self._PSA_GROUPS)
+        index_map = self._get_cached(self._PSA_INDEX_MAP)
+
+        scores = defaultdict(list)
+        # Loop over groups of n sequences (usually n=3 due to computational constraints)
+        for group in groups[:200]:
+            group_scores = []
+            # Loop over all pairwise combinations (with replacement)
+            for idx_pair in itertools.product(group, group):
+                idx_a, idx_c = idx_pair
+                if idx_a == idx_c:
+                    continue
+                pos_ac = index_map[idx_a][idx_c]
+                others = set(group).difference(idx_pair)
+                # Loop over all remaining n-2 indices (usually only 1)
+                for idx_b in others:
+                    pos_ab = index_map[idx_a][idx_b]
+                    pos_bc = index_map[idx_b][idx_c]
+                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
+                    denom = np.sum(mask)
+                    if denom > 0:
+                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
+                        group_scores.append(
+                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
+                        )
+            group_scores = np.array(group_scores)
+            scores[name + "_min"].append(group_scores.min())
+            scores[name + "_mean"].append(group_scores.mean())
+            scores[name + "_max"].append(group_scores.max())
+
+        feat_dict = {}
+        for tag in scores:
+            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
         return feat_dict
 
     # @_feature
@@ -402,22 +585,19 @@ class FeatureExtractor(BaseFeatureExtractor):
         al_mat = self._psa_config[datatype]["matrix"]
         op = self._psa_config[datatype]["op"]
         ep = self._psa_config[datatype]["ep"]
-        max_num_groups = self._psa_config["MAX_COUNT"] // GROUP_SIZE
+        psas_per_group = GROUP_SIZE * (GROUP_SIZE - 1) // 2
+        max_num_groups = self._psa_config["MAX_COUNT"] // psas_per_group
         # Compute sets of pairwise alignments
         n = len(self._sequences)
-        seq_tuples = list(itertools.combinations(range(n), r=GROUP_SIZE))
-        if len(seq_tuples) > max_num_groups:
-            # TODO: make sampling more robust (e.g. uniform may miss outlier sequences)
-            seq_tuples = random.sample(seq_tuples, k=max_num_groups)
-
-        # print(f"Computing {len(seq_tuples)} PSA groups")
+        int_type = self._cache[self._INT_TYPE]
         alignments = defaultdict(dict)
         groupings = []
-        for seq_tuple in seq_tuples:
+        for seq_tuple in utils.sample_index_tuples(n, r=GROUP_SIZE, k=max_num_groups):
             groupings.append(seq_tuple)
             for combi in itertools.combinations(seq_tuple, r=2):
                 idx_q, idx_r = combi
                 if (idx_q in alignments) and (idx_r in alignments[idx_q]):
+                    # Already processed this alignment in another group
                     continue
                 al = parasail.nw_trace_scan(
                     str(self._sequences[idx_q].seq),
@@ -426,22 +606,17 @@ class FeatureExtractor(BaseFeatureExtractor):
                     ep,
                     al_mat,
                 )
-                # al_arr = np.array(
-                #     [
-                #         [*map(ord, al.traceback.query.upper())],
-                #         [*map(ord, al.traceback.ref.upper())],
-                #     ]
-                # )
                 alignments[idx_q][idx_r] = np.array(
-                    list(map(ord, al.traceback.query)), dtype=np.int32
+                    list(map(ord, al.traceback.query)), dtype=int_type
                 )
                 alignments[idx_r][idx_q] = np.array(
-                    list(map(ord, al.traceback.ref)), dtype=np.int32
+                    list(map(ord, al.traceback.ref)), dtype=int_type
                 )
         return alignments, groupings
 
     def _get_psa_index_map(self) -> dict:
-        GAP_ORD = ord(GAP_CHAR)
+        int_type = self._cache[self._INT_TYPE]
+        GAP_ORD = int_type(ord(GAP_CHAR))
         index_map = defaultdict(dict)
         for group in self._cache[self._PSA_GROUPS]:
             for idx_a, idx_b in itertools.product(group, group):
@@ -453,7 +628,7 @@ class FeatureExtractor(BaseFeatureExtractor):
                 al_b = self._cache[self._PSA][idx_b][idx_a]
 
                 # vector with positional indices in b with respect to those in a
-                positions = np.cumsum(al_b != GAP_ORD).astype(np.int32) - 1
+                positions = (np.cumsum(al_b != GAP_ORD) - 1).astype(int_type)
                 positions[al_b == GAP_ORD] = GAP_CODE
                 positions = positions[al_a != GAP_ORD]
                 index_map[idx_a][idx_b] = positions
@@ -478,8 +653,7 @@ class FeatureExtractor(BaseFeatureExtractor):
                     pos_ab = index_map[idx_a][idx_b]
                     pos_bc = index_map[idx_b][idx_c]
                     mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
-                    denom = np.sum(mask)
-                    if denom > 0:
+                    if np.sum(mask) > 0:
                         # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
                         group_scores.append(
                             similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
