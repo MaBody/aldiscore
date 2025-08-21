@@ -9,7 +9,12 @@ import multiprocessing as mp
 from functools import partial
 import datetime
 
+import warnings
+
+# warnings.simplefilter("error", RuntimeWarning)
+
 _DONE = "DONE"
+_TRACK_PERF = True
 
 
 def get_dirs(dir):
@@ -65,7 +70,6 @@ def process_queue(queue: mp.Queue):
             break
 
 
-track_perf = True
 if __name__ == "__main__":
 
     data_dir = Path("/hits/fast/cme/bodynems/data/paper")
@@ -79,7 +83,7 @@ if __name__ == "__main__":
         cpu_counts[sources.index("treebase_v1")] = mp.cpu_count() - 2
 
     manager = mp.Manager()
-    queue = manager.Queue() if track_perf else None
+    queue = manager.Queue() if _TRACK_PERF else None
     if queue is not None:
         mp.Process(target=process_queue, args=(queue,)).start()
 

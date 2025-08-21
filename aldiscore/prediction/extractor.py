@@ -132,6 +132,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     _CHAR_DIST = "char_dist"
     _PSA = "psa"
     _PSA_GROUPS = "psa_groups"
+    _PSA_SCORES = "psa_scores"
     _PSA_INDEX_MAP = "psa_index_map"
     _DTYPE = "dtype"
     _INT_TYPE = "int_type"
@@ -157,7 +158,8 @@ class FeatureExtractor(BaseFeatureExtractor):
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 1000  # TODO: make dynamic (depending on data size)
+        config["MAX_COUNT"] = 750  # TODO: make dynamic (depending on data size)
+        config["GROUP_SIZE"] = 3
         return config
 
     @_feature
@@ -170,9 +172,10 @@ class FeatureExtractor(BaseFeatureExtractor):
         self._cache[self._INT_TYPE] = np.int32 if will_overflow else np.int16
 
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
-        alignments, groupings = self._get_pairwise_alignments()
+        alignments, groupings, scores = self._get_pairwise_alignments()
         self._cache[self._PSA] = alignments
         self._cache[self._PSA_GROUPS] = groupings
+        self._cache[self._PSA_SCORES] = scores
         self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
         return {}
 
@@ -294,18 +297,6 @@ class FeatureExtractor(BaseFeatureExtractor):
             feat_dict.update(self.descriptive_statistics(feat, name))
         return feat_dict
 
-    # @_feature
-    # def _psa_basic_features(self) -> dict[str, list]:
-    #     """Computes measures of transitive consistency on the PSA groups."""
-    #     name = "basic"
-    #     similarity_func = lambda x, y: np.sum(x == y) / len(x)
-    #     scores = self._compute_consistency(name, similarity_func)
-
-    #     feat_dict = {}
-    #     for tag in scores:
-    #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-    #     return feat_dict
-
     @_feature
     def _transitive_consistency(self) -> dict[str, list]:
         """Computes measures of transitive consistency on the PSA groups."""
@@ -318,17 +309,17 @@ class FeatureExtractor(BaseFeatureExtractor):
             feat_dict.update(self.descriptive_statistics(scores[tag], tag))
         return feat_dict
 
-    @_feature
-    def _transitive_consistency_dist(self) -> dict[str, list]:
-        """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_dist_abs"
-        similarity_func = lambda x, y: np.linalg.norm(x - y)
-        scores = self._compute_consistency(name, similarity_func)
-        feat_dict = {}
-        max_len = max(self._get_cached(self._SEQ_LEN))
-        for tag in scores:
-            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-        return feat_dict
+    # @_feature
+    # def _transitive_consistency_dist(self) -> dict[str, list]:
+    #     """Computes measures of transitive consistency on the PSA groups."""
+    #     name = "tc_dist_abs"
+    #     similarity_func = lambda x, y: np.linalg.norm(x - y)
+    #     scores = self._compute_consistency(name, similarity_func)
+    #     feat_dict = {}
+    #     max_len = max(self._get_cached(self._SEQ_LEN))
+    #     for tag in scores:
+    #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
+    #     return feat_dict
 
     @_feature
     def _transitive_consistency_dist_scaled(self) -> dict[str, list]:
@@ -343,169 +334,37 @@ class FeatureExtractor(BaseFeatureExtractor):
             feat_dict.update(self.descriptive_statistics(scaled, tag))
         return feat_dict
 
-    @_feature
-    def _transitive_consistency_dist_log(self) -> dict[str, list]:
-        """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_dist_log"
-        similarity_func = lambda x, y: np.log2(np.linalg.norm(x - y) + 1)
-        scores = self._compute_consistency(name, similarity_func)
-        feat_dict = {}
-        max_len = max(self._get_cached(self._SEQ_LEN))
-        for tag in scores:
-            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-        return feat_dict
-
-    @_feature
-    def _transitive_consistency_50(self) -> dict[str, list]:
-        """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_50"
-        similarity_func = lambda x, y: np.sum(x == y) / len(x)
-        scores = defaultdict(dict)
-        groups = self._get_cached(self._PSA_GROUPS)
-        index_map = self._get_cached(self._PSA_INDEX_MAP)
-
-        scores = defaultdict(list)
-        # Loop over groups of n sequences (usually n=3 due to computational constraints)
-        for group in groups[:50]:
-            group_scores = []
-            # Loop over all pairwise combinations (with replacement)
-            for idx_pair in itertools.product(group, group):
-                idx_a, idx_c = idx_pair
-                if idx_a == idx_c:
-                    continue
-                pos_ac = index_map[idx_a][idx_c]
-                others = set(group).difference(idx_pair)
-                # Loop over all remaining n-2 indices (usually only 1)
-                for idx_b in others:
-                    pos_ab = index_map[idx_a][idx_b]
-                    pos_bc = index_map[idx_b][idx_c]
-                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
-                    denom = np.sum(mask)
-                    if denom > 0:
-                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
-                        group_scores.append(
-                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
-                        )
-            group_scores = np.array(group_scores)
-            scores[name + "_min"].append(group_scores.min())
-            scores[name + "_mean"].append(group_scores.mean())
-            scores[name + "_max"].append(group_scores.max())
-
-        feat_dict = {}
-        for tag in scores:
-            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-        return feat_dict
-
-    @_feature
-    def _transitive_consistency_100(self) -> dict[str, list]:
-        """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_100"
-        similarity_func = lambda x, y: np.sum(x == y) / len(x)
-        scores = defaultdict(dict)
-        groups = self._get_cached(self._PSA_GROUPS)
-        index_map = self._get_cached(self._PSA_INDEX_MAP)
-
-        scores = defaultdict(list)
-        # Loop over groups of n sequences (usually n=3 due to computational constraints)
-        for group in groups[:100]:
-            group_scores = []
-            # Loop over all pairwise combinations (with replacement)
-            for idx_pair in itertools.product(group, group):
-                idx_a, idx_c = idx_pair
-                if idx_a == idx_c:
-                    continue
-                pos_ac = index_map[idx_a][idx_c]
-                others = set(group).difference(idx_pair)
-                # Loop over all remaining n-2 indices (usually only 1)
-                for idx_b in others:
-                    pos_ab = index_map[idx_a][idx_b]
-                    pos_bc = index_map[idx_b][idx_c]
-                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
-                    denom = np.sum(mask)
-                    if denom > 0:
-                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
-                        group_scores.append(
-                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
-                        )
-            group_scores = np.array(group_scores)
-            scores[name + "_min"].append(group_scores.min())
-            scores[name + "_mean"].append(group_scores.mean())
-            scores[name + "_max"].append(group_scores.max())
-
-        feat_dict = {}
-        for tag in scores:
-            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-        return feat_dict
-
-    @_feature
-    def _transitive_consistency_200(self) -> dict[str, list]:
-        """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_200"
-        similarity_func = lambda x, y: np.sum(x == y) / len(x)
-        scores = defaultdict(dict)
-        groups = self._get_cached(self._PSA_GROUPS)
-        index_map = self._get_cached(self._PSA_INDEX_MAP)
-
-        scores = defaultdict(list)
-        # Loop over groups of n sequences (usually n=3 due to computational constraints)
-        for group in groups[:200]:
-            group_scores = []
-            # Loop over all pairwise combinations (with replacement)
-            for idx_pair in itertools.product(group, group):
-                idx_a, idx_c = idx_pair
-                if idx_a == idx_c:
-                    continue
-                pos_ac = index_map[idx_a][idx_c]
-                others = set(group).difference(idx_pair)
-                # Loop over all remaining n-2 indices (usually only 1)
-                for idx_b in others:
-                    pos_ab = index_map[idx_a][idx_b]
-                    pos_bc = index_map[idx_b][idx_c]
-                    mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
-                    denom = np.sum(mask)
-                    if denom > 0:
-                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
-                        group_scores.append(
-                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
-                        )
-            group_scores = np.array(group_scores)
-            scores[name + "_min"].append(group_scores.min())
-            scores[name + "_mean"].append(group_scores.mean())
-            scores[name + "_max"].append(group_scores.max())
-
-        feat_dict = {}
-        for tag in scores:
-            feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-        return feat_dict
-
     # @_feature
-    # def _pairwise_features(self) -> dict[str, list]:
-    #     """Computes a bunch of features based on pairwise alignments of the unaligned sequences.
-    #     - basic pairwise alignments: penalties = (1, 0, 0, 0)
-    #     - advanced pairwise alignments: penalties = (2, -0.5, 0, -3) (Chowdhury and Garai, 2017)
-    #     """
-    #     penalty_settings = [(1, 0, 0, 0), (2, -0.5, 0, -3)]
-    #     suffixes = ["_basic", "_advanced"]
+    # def _transitive_consistency_dist_log(self) -> dict[str, list]:
+    #     """Computes measures of transitive consistency on the PSA groups."""
+    #     name = "tc_dist_log"
+    #     similarity_func = lambda x, y: np.log2(np.linalg.norm(x - y) + 1)
+    #     scores = self._compute_consistency(name, similarity_func)
     #     feat_dict = {}
-    #     for penalties, suffix in zip(penalty_settings, suffixes):
-    #         alignments = self._pairwise_alignments(penalties)
-
-    #         name = "score_ratio" + suffix
-    #         feat = self._alignment_score_ratio(alignments)
-    #         feat_dict.update(self.descriptive_statistics(feat, name))
-
-    #         name = "gap_ratio" + suffix
-    #         feat = self._alignment_gap_ratio(alignments)
-    #         feat_dict.update(self.descriptive_statistics(feat, name))
-
-    #         name = "stretch_ratio" + suffix
-    #         feat = self._alignment_stretch_ratio(alignments)
-    #         feat_dict.update(self.descriptive_statistics(feat, name))
-
-    #         name = "avg_gap_length" + suffix
-    #         feat = self._average_gap_length(alignments)
-    #         feat_dict.update(self.descriptive_statistics(feat, name))
+    #     max_len = max(self._get_cached(self._SEQ_LEN))
+    #     for tag in scores:
+    #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
     #     return feat_dict
+
+    @_feature
+    def _pairwise_features(self) -> dict[str, list]:
+        """Computes a bunch of features based on pairwise alignments of the unaligned sequences."""
+        score_dict = defaultdict(dict)
+        al_scores = self._get_cached(self._PSA_SCORES)
+        func_map = {
+            "psa_score_ratio": self._alignment_score_ratio,
+            "psa_gap_ratio": self._alignment_gap_ratio,
+            "psa_stretch_ratio": self._alignment_stretch_ratio,
+            "psa_gap_length": self._average_gap_length,
+        }
+        for key, func in func_map.items():
+            for idx_pair in al_scores:
+                if idx_pair not in score_dict[key]:
+                    score_dict[key][idx_pair] = func(idx_pair)
+        feat_dict = {}
+        for key, vals in score_dict.items():
+            feat_dict.update(self.descriptive_statistics(list(vals.values()), name=key))
+        return feat_dict
 
     # @_feature
     # def _perc_seq_hash_hamming_distance(self) -> dict[str, list]:
@@ -531,16 +390,16 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     # # # # # helper methods # # # # #
 
-    def _compute_sequence_entropy(self, sequence: SeqIO.SeqRecord) -> float:
-        dists = self._get_cached(self._CHAR_DIST)
+    # def _compute_sequence_entropy(self, sequence: SeqIO.SeqRecord) -> float:
+    #     dists = self._get_cached(self._CHAR_DIST)
 
-        char_counts = Counter(sequence.seq)
-        sequence_length = len(sequence.seq)
-        char_probabilities = [
-            char_count / sequence_length for char_count in char_counts.values()
-        ]
-        entropy = -sum(p * math.log2(p) for p in char_probabilities if p > 0)
-        return entropy
+    #     char_counts = Counter(sequence.seq)
+    #     sequence_length = len(sequence.seq)
+    #     char_probabilities = [
+    #         char_count / sequence_length for char_count in char_counts.values()
+    #     ]
+    #     entropy = -sum(p * math.log2(p) for p in char_probabilities if p > 0)
+    #     return entropy
 
     def _get_char_distributions(self):
         """
@@ -580,22 +439,24 @@ class FeatureExtractor(BaseFeatureExtractor):
         return js
 
     def _get_pairwise_alignments(self):
-        GROUP_SIZE = 3
         datatype = self._cache[self._DTYPE]
         al_mat = self._psa_config[datatype]["matrix"]
         op = self._psa_config[datatype]["op"]
         ep = self._psa_config[datatype]["ep"]
-        psas_per_group = GROUP_SIZE * (GROUP_SIZE - 1) // 2
+
+        group_size = self._psa_config["GROUP_SIZE"]
+        psas_per_group = group_size * (group_size - 1) // 2
         max_num_groups = self._psa_config["MAX_COUNT"] // psas_per_group
-        # Compute sets of pairwise alignments
         n = len(self._sequences)
         int_type = self._cache[self._INT_TYPE]
         alignments = defaultdict(dict)
+        scores = {}
         groupings = []
-        for seq_tuple in utils.sample_index_tuples(n, r=GROUP_SIZE, k=max_num_groups):
-            groupings.append(seq_tuple)
-            for combi in itertools.combinations(seq_tuple, r=2):
-                idx_q, idx_r = combi
+        # Compute sets of pairwise alignments
+        for seq_group in utils.sample_index_tuples(n, r=group_size, k=max_num_groups):
+            groupings.append(seq_group)
+            for seq_pair in itertools.combinations(seq_group, r=2):
+                idx_q, idx_r = seq_pair
                 if (idx_q in alignments) and (idx_r in alignments[idx_q]):
                     # Already processed this alignment in another group
                     continue
@@ -612,7 +473,9 @@ class FeatureExtractor(BaseFeatureExtractor):
                 alignments[idx_r][idx_q] = np.array(
                     list(map(ord, al.traceback.ref)), dtype=int_type
                 )
-        return alignments, groupings
+                # Tuples are sorted, hence no need for checks here
+                scores[seq_pair] = al.score
+        return alignments, groupings, scores
 
     def _get_psa_index_map(self) -> dict:
         int_type = self._cache[self._INT_TYPE]
@@ -664,62 +527,41 @@ class FeatureExtractor(BaseFeatureExtractor):
             scores[name + "_max"].append(group_scores.max())
         return scores
 
-    def _alignment_score_ratio(self, alignments) -> list:
+    def _alignment_score_ratio(self, idx_pair: tuple[int]) -> float:
         """Score ratio = Alignment score scaled by the minimum sequence length"""
-        score_ratios = []
-        for alignment in alignments:
-            s1, s2 = alignment.sequences
-            score_ratio = alignment.score / min(len(s1), len(s2))
-            score_ratios.append(score_ratio)
-        return score_ratios
+        return self._cache[self._PSA_SCORES][idx_pair] / min(
+            self._cache[self._SEQ_LEN][idx_pair[0]],
+            self._cache[self._SEQ_LEN][idx_pair[1]],
+        )
 
-    def _alignment_gap_ratio(self, alignments) -> list:
+    def _alignment_gap_ratio(self, idx_pair: tuple[int]) -> float:
         """Gap ratio = number of gaps divided by the total number of characters in the pairwise alignment"""
-        gap_ratios = []
-        for alignment in alignments:
-            gap_ratio = alignment.counts().gaps / alignment.length * 2
-            gap_ratios.append(gap_ratio)
-        return gap_ratios
+        al_a = self._cache[self._PSA][idx_pair[1]][idx_pair[0]]
+        al_b = self._cache[self._PSA][idx_pair[0]][idx_pair[1]]
+        gap_ord = self._cache[self._INT_TYPE](ord(GAP_CHAR))
+        num_gaps = np.sum(al_a == gap_ord) + np.sum(al_b == gap_ord)
+        return num_gaps / (2 * len(al_a))
 
-    def _alignment_stretch_ratio(self, alignments) -> list:
+    def _alignment_stretch_ratio(self, idx_pair: tuple[int]) -> float:
         """Stretch ratio = Increase in length of the longest unaligned sequence compared to the pairwise alignment"""
-        stretch_ratios = []
-        for alignment in alignments:
-            s1, s2 = alignment.sequences
-            stretch_ratio = max(len(s1), len(s2)) / alignment.length
-            stretch_ratios.append(stretch_ratio)
-        return stretch_ratios
+        max_len = max(
+            self._cache[self._SEQ_LEN][idx_pair[0]],
+            self._cache[self._SEQ_LEN][idx_pair[1]],
+        )
+        return max_len / len(self._cache[self._PSA][idx_pair[1]][idx_pair[0]])
 
-    def _average_gap_length(self, alignments) -> list:
+    def _average_gap_length(self, idx_pair: tuple[int]) -> float:
         """Average gap lengths."""
-        avg_gap_lengths = []
-        for alignment in alignments:
-            s1, s2 = alignment.sequences
-            avg_gap_lengths.append(self._seq_avg_gap_len(str(s1.seq)))
-            avg_gap_lengths.append(self._seq_avg_gap_len(str(s2.seq)))
-        return avg_gap_lengths
-
-    def _seq_avg_gap_len(self, sequence: str):
-        """Computes the average gap length by looping through the sequences."""
-        sequence = sequence.strip("-")
-        gap_lens = []
-        seen_gap = False
-        cur_len = 0
-        for c in sequence:
-            if c == "-":
-                seen_gap = True
-                cur_len += 1
-            elif seen_gap:
-                seen_gap = False
-                gap_lens.append(cur_len)
-                cur_len = 0
-
-        if cur_len:
-            gap_lens.append(cur_len)
-        if gap_lens:
-            return np.mean(gap_lens)
-        else:
-            return 0
+        gap_ord = self._cache[self._INT_TYPE](ord(GAP_CHAR))
+        al = np.stack(
+            [
+                self._cache[self._PSA][idx_pair[1]][idx_pair[0]],
+                self._cache[self._PSA][idx_pair[0]][idx_pair[1]],
+            ],
+            dtype=self._cache[self._INT_TYPE],
+        )
+        gap_lengths = utils.compute_gap_lengths(al, gap_ord)
+        return 0 if len(gap_lengths) == 0 else np.mean(gap_lengths)
 
     # def _compute_hamming_distance(self, hash_size: Optional[int] = 16) -> list:
     #     """
@@ -749,18 +591,16 @@ class FeatureExtractor(BaseFeatureExtractor):
     #         distances.append(dist)
     #     return distances
 
-    # def _compute_kmer_similarity(
-    #     self, k: int, n_kmers: int = 1000, seed: int = 0
-    # ) -> list:
-    #     if min(self._sequences._sequence_lengths) < k:
-    #         return np.nan
+    # def _compute_kmer_similarity(self, k: int, n_kmers: int) -> list:
+    #     if min(self._cache[self._SEQ_LEN]) < k:
+    #         print(f"WARNING: shortest sequence shorter than k-mer length with k={k}!")
 
-    #     random.seed(seed)
-    #     n_sequences = len(self._sequences.sequences)
+    #     n_seqs = len(self._sequences)
     #     frequencies = []
-    #     for _ in range(n_kmers):
+    #     rand_idxs = np.random.choice(n_seqs, size=k, replace=True)
+    #     for seq_idx in rand_idxs:
     #         # 1. choose a random sequence
-    #         reference_sequence = random.choice(self._sequences.sequences).seq
+    #         reference_sequence = np.random.choice(self._sequences.sequences).seq
     #         # 2. choose a random k-mer of length k
     #         start_idx = random.randint(0, len(reference_sequence) - k)
     #         kmer = reference_sequence[start_idx : start_idx + k]
@@ -768,6 +608,6 @@ class FeatureExtractor(BaseFeatureExtractor):
     #         num_contains_kmer = len(
     #             [seq for seq in self._sequences.sequences if kmer in seq.seq]
     #         )
-    #         frequencies.append((num_contains_kmer - 1) / (n_sequences - 1))
+    #         frequencies.append((num_contains_kmer - 1) / (n_seqs - 1))
 
     #     return frequencies
