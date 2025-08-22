@@ -14,10 +14,9 @@ def sample_index_tuples(n: int, r: int, k: int):
     - k: (maximum) number of tuples
     """
     samples = set()
-    done = False
     max_comb = math.comb(n, r)
     limit = np.minimum(max_comb, k)
-    while not done:
+    while True:
         # Sample k r-tuples randomly -> (k,r)
         samples_new = np.sort(
             np.random.randint(low=0, high=n, size=2 * k * r).reshape(2 * k, r), axis=1

@@ -115,7 +115,8 @@ class BaseFeatureExtractor(ABC):
         feat_dict["max:" + name] = np.max(series)
         feat_dict["mean:" + name] = np.mean(series)
         feat_dict["std:" + name] = np.std(series)
-        thresholds = [5, 10, 25, 50, 75, 90, 95]
+        thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
+        # thresholds = [1, 5, 10, 20, 35, 50, 65, 80, 90, 95, 99]
         percentiles = np.percentile(series, thresholds)
         for t, p in zip(thresholds, percentiles):
             feat_dict[f"p{t}:" + name] = p
@@ -152,17 +153,20 @@ class FeatureExtractor(BaseFeatureExtractor):
         config["AA"].update(psa_config.get("AA", {}))
         self._psa_config = config
 
-        self._init_cache()
+    # ----------------------------------------------
+    # --------------- INIT HELPERS -----------------
+    # ----------------------------------------------
 
     def _init_psa_config(self) -> dict[str, dict]:
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 750  # TODO: make dynamic (depending on data size)
+        config["MAX_COUNT"] = 1000  # TODO: make dynamic (depending on data size)
         config["GROUP_SIZE"] = 3
         return config
 
     @_feature
+    # _init_cache needs to be called as a feature to support performance logs
     def _init_cache(self) -> dict[str, str]:
         self._cache.clear()
         self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
@@ -179,7 +183,9 @@ class FeatureExtractor(BaseFeatureExtractor):
         self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
         return {}
 
+    # ------------------------------------------
     # --------------- FEATURES -----------------
+    # ------------------------------------------
 
     @_feature
     def _data_type(self) -> dict[str, list]:
@@ -388,7 +394,9 @@ class FeatureExtractor(BaseFeatureExtractor):
     #         feat_dict.update(self.descriptive_statistics(feat, name))
     #     return feat_dict
 
-    # # # # # helper methods # # # # #
+    # ----------------------------------------------
+    # --------------- MISC HELPERS -----------------
+    # ----------------------------------------------
 
     # def _compute_sequence_entropy(self, sequence: SeqIO.SeqRecord) -> float:
     #     dists = self._get_cached(self._CHAR_DIST)
@@ -444,7 +452,9 @@ class FeatureExtractor(BaseFeatureExtractor):
         op = self._psa_config[datatype]["op"]
         ep = self._psa_config[datatype]["ep"]
 
-        group_size = self._psa_config["GROUP_SIZE"]
+        # If only 3 sequences, group_size=4 won't work
+        # Less than 3 sequences should not be processed anyway
+        group_size = min(self._psa_config["GROUP_SIZE"], 3)
         psas_per_group = group_size * (group_size - 1) // 2
         max_num_groups = self._psa_config["MAX_COUNT"] // psas_per_group
         n = len(self._sequences)
