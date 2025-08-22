@@ -115,13 +115,14 @@ class BaseFeatureExtractor(ABC):
         feat_dict["max:" + name] = np.max(series)
         feat_dict["mean:" + name] = np.mean(series)
         feat_dict["std:" + name] = np.std(series)
+        # thresholds = [1, 5, 10, 25, 40, 50, 60, 75, 90, 95, 99]
         # thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
-        thresholds = [1, 5, 10, 30, 50, 70, 90, 95, 99]
+        thresholds = [1, 5, 10, 25, 50, 75, 90, 95, 99]
+
         percentiles = np.percentile(series, thresholds)
         for t, p in zip(thresholds, percentiles):
             feat_dict[f"p{t}:" + name] = p
-        # iqr = np.percentile(series, 75) - np.percentile(series, 25)
-        # feature_dict["iqr_" + name] = iqr
+        feat_dict["iqr:" + name] = feat_dict["p75:" + name] - feat_dict["p25:" + name]
         return feat_dict
 
     # # # # # features # # # # #
@@ -403,12 +404,39 @@ class FeatureExtractor(BaseFeatureExtractor):
                 diff = np.std(seq_means, ddof=1)
                 if diff > 0:
                     diff /= seq_means.mean()
-                score_dict[name + "_diff"].append(diff)
                 score_dict[name + "_logdiff"].append(np.log2(diff + 1))
 
         feat_dict = {}
         for tag, vals in score_dict.items():
             feat_dict.update(self.descriptive_statistics(vals, tag))
+        return feat_dict
+
+    # @_feature
+    def _kmer_similarity(self) -> dict[str, list]:
+        """Computes features based on k-mers."""
+        name = "mer"
+        Ks = [2, 3, 5, 7]
+        seqs = [
+            list(map(ord, str(seq_record.seq).upper()))
+            for seq_record in self._sequences
+        ]
+        feat_dict = {}
+        for k in Ks:
+            lookup_table = defaultdict(int)
+            for seq in seqs:
+                n = len(seq)
+                if n < k:
+                    continue
+
+                for kmer in {tuple(seq[i : i + k]) for i in range(n - k + 1)}:
+                    lookup_table[kmer] += 1
+            counts = np.array(list(lookup_table.values()))
+            feat_dict[str(k) + name + "_count"] = len(counts) / counts.sum()
+            probs = counts / sum(counts)
+            feat_dict[str(k) + name + "_ent"] = -np.sum(probs * np.log2(probs))
+            # feat_dict.update(self.descriptive_statistics(counts, str(k) + name))
+            # possible = min(n - k + 1, 4**k)
+
         return feat_dict
 
     # @_feature
@@ -491,40 +519,44 @@ class FeatureExtractor(BaseFeatureExtractor):
         op = self._psa_config[datatype]["op"]
         ep = self._psa_config[datatype]["ep"]
 
-        # If only 3 sequences, group_size=4 won't work
+        # If only 3 sequences, group_size>3 won't work
         # Less than 3 sequences should not be processed anyway
-        group_size = min(self._psa_config["GROUP_SIZE"], 3)
+        group_size = max(min(self._psa_config["GROUP_SIZE"], len(self._sequences)), 3)
         psas_per_group = group_size * (group_size - 1) // 2
         max_num_groups = self._psa_config["MAX_COUNT"] // psas_per_group
         n = len(self._sequences)
         int_type = self._cache[self._INT_TYPE]
-        alignments = defaultdict(dict)
+        psas = defaultdict(dict)
+        psa_nums = []
         scores = {}
         groupings = []
+
         # Compute sets of pairwise alignments
         for seq_group in utils.sample_index_tuples(n, r=group_size, k=max_num_groups):
             groupings.append(seq_group)
             for seq_pair in itertools.combinations(seq_group, r=2):
                 idx_q, idx_r = seq_pair
-                if (idx_q in alignments) and (idx_r in alignments[idx_q]):
+                if (idx_q in psas) and (idx_r in psas[idx_q]):
                     # Already processed this alignment in another group
                     continue
                 al = parasail.nw_trace_scan(
-                    str(self._sequences[idx_q].seq),
-                    str(self._sequences[idx_r].seq),
+                    str(self._sequences[idx_q].seq).upper(),
+                    str(self._sequences[idx_r].seq).upper(),
+                    # TODO: Try random variations of penalties
+                    # open=int(op + 0.25 * op * (random.random() * 2 - 1)),
                     open=op,
                     extend=ep,
                     matrix=al_mat,
                 )
-                alignments[idx_q][idx_r] = np.array(
+                psas[idx_q][idx_r] = np.array(
                     list(map(ord, al.traceback.query)), dtype=int_type
                 )
-                alignments[idx_r][idx_q] = np.array(
+                psas[idx_r][idx_q] = np.array(
                     list(map(ord, al.traceback.ref)), dtype=int_type
                 )
                 # Tuples are sorted, hence no need for checks here
                 scores[seq_pair] = al.score
-        return alignments, groupings, scores
+        return psas, groupings, scores
 
     def _get_psa_index_map(self) -> dict:
         int_type = self._cache[self._INT_TYPE]
@@ -549,7 +581,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     def _compute_consistency(self, name: str, similarity_func) -> dict:
         groups = self._get_cached(self._PSA_GROUPS)
         index_map = self._get_cached(self._PSA_INDEX_MAP)
-        scores = defaultdict(list)
+        score_dict = defaultdict(list)
         # Loop over groups of r sequences (usually r=3)
         for group in groups:
             group_scores = []
@@ -570,15 +602,18 @@ class FeatureExtractor(BaseFeatureExtractor):
                         group_scores.append(
                             similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
                         )
-            # Compute summary statistics
+            # Compute summary statistics (6 scores per group if r=3)
             group_scores = np.array(group_scores)
-            scores[name + "_min"].append(group_scores.min())
-            scores[name + "_mean"].append(group_scores.mean())
-            scores[name + "_std"].append(group_scores.std())
-            scores[name + "_max"].append(group_scores.max())
-            for p in [10, 25, 75, 90]:
-                scores[name + f"_p{p}"].append(np.percentile(group_scores, p))
-        return scores
+            score_dict[name + "_min"].append(group_scores.min())
+            score_dict[name + "_mean"].append(group_scores.mean())
+            score_dict[name + "_std"].append(group_scores.std())
+            score_dict[name + "_max"].append(group_scores.max())
+            score_dict[name + "_p50"].append(np.percentile(group_scores, 50))
+            # for p in [1, 5, 10, 25, 75, 90, 95]:
+            #     scores[name + f"_p{p}"].append(np.percentile(group_scores, p))
+            # scores[name + "_iqr"] = scores[name + "p75"] - scores[name + "p25"]
+
+        return score_dict
 
     def _alignment_score_ratio(self, idx_pair: tuple[int]) -> float:
         """Score ratio = Alignment score scaled by the minimum sequence length"""
