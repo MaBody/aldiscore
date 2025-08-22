@@ -115,12 +115,11 @@ class BaseFeatureExtractor(ABC):
         feat_dict["max:" + name] = np.max(series)
         feat_dict["mean:" + name] = np.mean(series)
         feat_dict["std:" + name] = np.std(series)
-        thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
-        # thresholds = [1, 5, 10, 20, 35, 50, 65, 80, 90, 95, 99]
+        # thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
+        thresholds = [1, 5, 10, 30, 50, 70, 90, 95, 99]
         percentiles = np.percentile(series, thresholds)
         for t, p in zip(thresholds, percentiles):
             feat_dict[f"p{t}:" + name] = p
-        # feat_dict["median_" + name] = np.median(series)
         # iqr = np.percentile(series, 75) - np.percentile(series, 25)
         # feature_dict["iqr_" + name] = iqr
         return feat_dict
@@ -170,9 +169,9 @@ class FeatureExtractor(BaseFeatureExtractor):
     def _init_cache(self) -> dict[str, str]:
         self._cache.clear()
         self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
-        self._cache[self._SEQ_LEN] = [len(seq) for seq in self._sequences]
+        self._cache[self._SEQ_LEN] = np.array([len(seq) for seq in self._sequences])
 
-        will_overflow = max(self._cache[self._SEQ_LEN]) >= 2**15
+        will_overflow = self._cache[self._SEQ_LEN].max() >= 2**15
         self._cache[self._INT_TYPE] = np.int32 if will_overflow else np.int16
 
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
@@ -211,20 +210,19 @@ class FeatureExtractor(BaseFeatureExtractor):
     @_feature
     def _sequence_length(self) -> dict[str, list]:
         name = "seq_length"
-        feat = self._cache[self._SEQ_LEN]
+        feat = self._get_cached(self._SEQ_LEN)
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
-    # @_feature
-    # def _sequence_length_ratio(self) -> dict[str, list]:
-    #     name = "seq_length_ratio"
-    #     seq_lengths = [len(seq) for seq in self._sequences]
-    #     feat = min(seq_lengths) / max(seq_lengths)
-    #     feat_dict = {name: feat}
-    #     return feat_dict
+    @_feature
+    def _sequence_length_ratio(self) -> dict[str, list]:
+        name = "seq_length_ratio"
+        seq_lengths = self._get_cached(self._SEQ_LEN)
+        feat = min(seq_lengths) / max(seq_lengths)
+        feat_dict = {name: feat}
+        return feat_dict
 
     @_feature
-    # TODO: probably redundant
     def _lower_bound_gap_percentage(self) -> dict[str, list]:
         name = "lower_bound_gap_percentage"
         seq_lengths = self._get_cached(self._SEQ_LEN)
@@ -327,18 +325,18 @@ class FeatureExtractor(BaseFeatureExtractor):
     #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
     #     return feat_dict
 
-    @_feature
-    def _transitive_consistency_dist_scaled(self) -> dict[str, list]:
-        """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_dist_scaled"
-        similarity_func = lambda x, y: np.linalg.norm(x - y)
-        scores = self._compute_consistency(name, similarity_func)
-        feat_dict = {}
-        max_len = max(self._get_cached(self._SEQ_LEN))
-        for tag in scores:
-            scaled = np.array(scores[tag]) / max_len
-            feat_dict.update(self.descriptive_statistics(scaled, tag))
-        return feat_dict
+    # @_feature
+    # def _transitive_consistency_dist_scaled(self) -> dict[str, list]:
+    #     """Computes measures of transitive consistency on the PSA groups."""
+    #     name = "tc_dist_scaled"
+    #     similarity_func = lambda x, y: np.linalg.norm(x - y)
+    #     scores = self._compute_consistency(name, similarity_func)
+    #     feat_dict = {}
+    #     max_len = max(self._get_cached(self._SEQ_LEN))
+    #     for tag in scores:
+    #         scaled = np.array(scores[tag]) / max_len
+    #         feat_dict.update(self.descriptive_statistics(scaled, tag))
+    #     return feat_dict
 
     # @_feature
     # def _transitive_consistency_dist_log(self) -> dict[str, list]:
@@ -353,23 +351,64 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     @_feature
-    def _pairwise_features(self) -> dict[str, list]:
+    def _psa_basic_features(self) -> dict[str, list]:
         """Computes a bunch of features based on pairwise alignments of the unaligned sequences."""
-        score_dict = defaultdict(dict)
+        score_dict = defaultdict(list)
         al_scores = self._get_cached(self._PSA_SCORES)
         func_map = {
             "psa_score_ratio": self._alignment_score_ratio,
             "psa_gap_ratio": self._alignment_gap_ratio,
             "psa_stretch_ratio": self._alignment_stretch_ratio,
-            "psa_gap_length": self._average_gap_length,
         }
-        for key, func in func_map.items():
+        idx_cache = set()
+        for name, func in func_map.items():
             for idx_pair in al_scores:
-                if idx_pair not in score_dict[key]:
-                    score_dict[key][idx_pair] = func(idx_pair)
+                if idx_pair not in idx_cache:
+                    idx_cache.add(idx_pair)
+                    score_dict[name].append(func(idx_pair))
         feat_dict = {}
-        for key, vals in score_dict.items():
-            feat_dict.update(self.descriptive_statistics(list(vals.values()), name=key))
+        for name, vals in score_dict.items():
+            feat_dict.update(self.descriptive_statistics(vals, name))
+        return feat_dict
+
+    @_feature
+    def _psa_gap_length(self) -> dict[str, list]:
+        """Computes features based on gap lengths."""
+        name = "psa_gap_len"
+        score_dict = defaultdict(list)
+        # psa_scores only used for alignment index pairs here
+        al_scores = self._get_cached(self._PSA_SCORES)
+        idx_cache = set()
+        for idx_pair in al_scores:
+            if idx_pair not in idx_cache:
+                idx_cache.add(idx_pair)
+                gap_len_arr = self._gap_lengths(idx_pair, name)
+                gap_ends = gap_len_arr > 0
+                has_gaps = gap_ends.any(axis=1)
+
+                gap_lens = gap_len_arr[gap_ends] if has_gaps.any() else np.array([0])
+
+                score_dict[name + "_mean"].append(gap_lens.mean())
+                score_dict[name + "_p50"].append(np.percentile(gap_lens, 50))
+                score_dict[name + "_std"].append(gap_lens.std())
+
+                iqr = np.percentile(gap_lens, 75) - np.percentile(gap_lens, 25)
+                score_dict[name + "_iqr"].append(iqr)
+
+                seq_means = np.zeros_like(has_gaps)
+                if has_gaps[0]:
+                    seq_means[0] = gap_len_arr[0, gap_ends[0]].mean()
+                if has_gaps[1]:
+                    seq_means[1] = gap_len_arr[1, gap_ends[1]].mean()
+                diff = np.std(seq_means, ddof=1)
+                if diff > 0:
+                    diff /= seq_means.mean()
+                score_dict[name + "_diff"].append(diff)
+                score_dict[name + "_logdiff"].append(np.log2(diff + 1))
+
+        feat_dict = {}
+        for tag, vals in score_dict.items():
+            feat_dict.update(self.descriptive_statistics(vals, tag))
         return feat_dict
 
     # @_feature
@@ -473,9 +512,9 @@ class FeatureExtractor(BaseFeatureExtractor):
                 al = parasail.nw_trace_scan(
                     str(self._sequences[idx_q].seq),
                     str(self._sequences[idx_r].seq),
-                    op,
-                    ep,
-                    al_mat,
+                    open=op,
+                    extend=ep,
+                    matrix=al_mat,
                 )
                 alignments[idx_q][idx_r] = np.array(
                     list(map(ord, al.traceback.query)), dtype=int_type
@@ -511,7 +550,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         groups = self._get_cached(self._PSA_GROUPS)
         index_map = self._get_cached(self._PSA_INDEX_MAP)
         scores = defaultdict(list)
-        # Loop over groups of n sequences (usually n=3 due to computational constraints)
+        # Loop over groups of r sequences (usually r=3)
         for group in groups:
             group_scores = []
             # Loop over all pairwise combinations (with replacement)
@@ -521,7 +560,7 @@ class FeatureExtractor(BaseFeatureExtractor):
                     continue
                 pos_ac = index_map[idx_a][idx_c]
                 others = set(group).difference(idx_pair)
-                # Loop over all remaining n-2 indices (usually only 1)
+                # Loop over all remaining r-2 indices (with r=3 only 1 remaining)
                 for idx_b in others:
                     pos_ab = index_map[idx_a][idx_b]
                     pos_bc = index_map[idx_b][idx_c]
@@ -531,18 +570,21 @@ class FeatureExtractor(BaseFeatureExtractor):
                         group_scores.append(
                             similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
                         )
+            # Compute summary statistics
             group_scores = np.array(group_scores)
             scores[name + "_min"].append(group_scores.min())
             scores[name + "_mean"].append(group_scores.mean())
+            scores[name + "_std"].append(group_scores.std())
             scores[name + "_max"].append(group_scores.max())
+            for p in [10, 25, 75, 90]:
+                scores[name + f"_p{p}"].append(np.percentile(group_scores, p))
         return scores
 
     def _alignment_score_ratio(self, idx_pair: tuple[int]) -> float:
         """Score ratio = Alignment score scaled by the minimum sequence length"""
-        return self._cache[self._PSA_SCORES][idx_pair] / min(
-            self._cache[self._SEQ_LEN][idx_pair[0]],
-            self._cache[self._SEQ_LEN][idx_pair[1]],
-        )
+        score = self._cache[self._PSA_SCORES][idx_pair]
+        min_len = self._cache[self._SEQ_LEN][list(idx_pair)].min()
+        return score / min_len
 
     def _alignment_gap_ratio(self, idx_pair: tuple[int]) -> float:
         """Gap ratio = number of gaps divided by the total number of characters in the pairwise alignment"""
@@ -554,13 +596,10 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     def _alignment_stretch_ratio(self, idx_pair: tuple[int]) -> float:
         """Stretch ratio = Increase in length of the longest unaligned sequence compared to the pairwise alignment"""
-        max_len = max(
-            self._cache[self._SEQ_LEN][idx_pair[0]],
-            self._cache[self._SEQ_LEN][idx_pair[1]],
-        )
+        max_len = self._cache[self._SEQ_LEN][list(idx_pair)].max()
         return max_len / len(self._cache[self._PSA][idx_pair[1]][idx_pair[0]])
 
-    def _average_gap_length(self, idx_pair: tuple[int]) -> float:
+    def _gap_lengths(self, idx_pair: tuple[int], name: str) -> np.ndarray:
         """Average gap lengths."""
         gap_ord = self._cache[self._INT_TYPE](ord(GAP_CHAR))
         al = np.stack(
@@ -570,8 +609,8 @@ class FeatureExtractor(BaseFeatureExtractor):
             ],
             dtype=self._cache[self._INT_TYPE],
         )
-        gap_lengths = utils.compute_gap_lengths(al, gap_ord)
-        return 0 if len(gap_lengths) == 0 else np.mean(gap_lengths)
+        gap_length_arr = utils.compute_gap_lengths(al, gap_ord)
+        return gap_length_arr
 
     # def _compute_hamming_distance(self, hash_size: Optional[int] = 16) -> list:
     #     """

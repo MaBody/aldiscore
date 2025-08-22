@@ -34,7 +34,7 @@ def sample_index_tuples(n: int, r: int, k: int):
 
 
 def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
-    """Computes the gap lengths in a given alignment. Returns a flat array."""
+    """Computes the gap lengths in a given alignment. Non-gapped positions are encoded with gap_code."""
     gap_mask = alignment == gap_code
     gap_ends = np.diff(gap_mask, n=1, axis=1, append=0) == -1
     # gap_counts contains an incrementing counter for gapped positions in each sequence
@@ -52,4 +52,4 @@ def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
     site_codes = gap_counts - gap_end_counts_shifted
     # Remove all positions that are not gap region ends
     site_codes[~gap_ends] = 0
-    return site_codes[site_codes > 0]
+    return site_codes
