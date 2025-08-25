@@ -27,7 +27,7 @@ def process_dataset(dataset: str, source: str, data_dir: Path, queue: mp.Queue):
     seqs = list(
         SeqIO.parse(data_dir / source / dataset / "sequences.fasta", format="fasta")
     )
-    extractor = FeatureExtractor(seqs, track_perf=track_perf)
+    extractor = FeatureExtractor(seqs, track_perf=track_perf, validate="warn")
     feats = extractor.compute()
 
     if track_perf:

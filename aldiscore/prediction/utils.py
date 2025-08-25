@@ -4,6 +4,10 @@ import itertools
 import random
 import math
 from aldiscore.scoring.encoding import _ffill_numpy_2d_axis_1
+from collections import defaultdict
+from Bio.SeqRecord import SeqRecord
+from functools import partial
+import itertools
 
 
 def sample_index_tuples(n: int, r: int, k: int):
@@ -53,3 +57,48 @@ def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
     # Remove all positions that are not gap region ends
     site_codes[~gap_ends] = 0
     return site_codes
+
+
+def repeat_distributions(sequences: list[SeqRecord]) -> tuple[np.ndarray]:
+    """
+    Occurrences of homopolymers and their lengths.
+    """
+    count_table = defaultdict(partial(np.zeros, shape=len(sequences)))
+    len_table = defaultdict(partial(np.zeros, shape=len(sequences)))
+    for i, seq_record in enumerate(sequences):
+        seq = str(seq_record.seq).upper()
+        # n = len(seq)
+        # if n == 0:
+        #     continue
+
+        # Homopolymers via groupby
+        for _, group in itertools.groupby(seq):
+            repeat = tuple(group)
+            k = len(repeat)
+            # if k > 1:
+            count_table[hash(repeat)][i] += 1
+            len_table[k][i] += 1
+
+    count_arr = np.stack(list(count_table.values()), axis=1)
+    len_arr = np.stack(list(len_table.values()), axis=1)
+    # count_arr = np.log(np.stack(list(count_table.values()), axis=1) + 1)
+    # len_arr = np.log(np.stack(list(len_table.values()), axis=1) + 1)
+    count_arr = count_arr / count_arr.sum(axis=1, keepdims=True)
+    len_arr = len_arr / len_arr.sum(axis=1, keepdims=True)
+    # repeat_lens = np.array(list(len_table.keys()), dtype=int_type)
+    return count_arr, len_arr
+
+
+def shannon_entropy(probs: np.ndarray):
+    return -np.sum(probs * np.log2(probs))
+
+
+def js_divergence(p: np.ndarray, q: np.ndarray, axis: int):
+    p = p / np.sum(p, axis=axis, keepdims=True)
+    q = q / np.sum(q, axis=axis, keepdims=True)
+    m = (p + q) / 2
+    # Relative entropy must always be non-negative --> enforce with clip
+    left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
+    right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
+    js = np.sqrt((left + right) / 2)
+    return js

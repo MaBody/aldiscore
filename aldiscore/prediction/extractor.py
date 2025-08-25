@@ -1,4 +1,3 @@
-import itertools
 import math
 from pathlib import Path
 import datetime
@@ -6,14 +5,14 @@ import random
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import Callable, Optional, Tuple
+from typing import Literal, Optional
 from Bio import Align, SeqIO
 from Bio.SeqRecord import SeqRecord
 import Bio.SeqRecord
 from abc import ABC
 from scipy.spatial.distance import jensenshannon
 from scipy.special import kl_div
-import itertools
+import itertools as it
 from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
@@ -25,6 +24,8 @@ import subprocess
 from collections import defaultdict
 from time import perf_counter
 import parasail
+import sys
+
 
 _FEATURE_FLAG = "_is_feature"
 _LOG_TIME = True
@@ -50,9 +51,6 @@ class BaseFeatureExtractor(ABC):
         sequences: list[SeqRecord],
         track_perf: bool = False,
     ):
-
-        if len(sequences) < 3:
-            print(f"WARNING: Number of sequences must be larger than 2!")
 
         self._sequences = sequences
         self._cache = {}
@@ -116,13 +114,13 @@ class BaseFeatureExtractor(ABC):
         feat_dict["mean:" + name] = np.mean(series)
         feat_dict["std:" + name] = np.std(series)
         # thresholds = [1, 5, 10, 25, 40, 50, 60, 75, 90, 95, 99]
-        # thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
-        thresholds = [1, 5, 10, 25, 50, 75, 90, 95, 99]
+        thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
+        # thresholds = [1, 5, 10, 25, 50, 75, 90, 95, 99]
 
         percentiles = np.percentile(series, thresholds)
         for t, p in zip(thresholds, percentiles):
             feat_dict[f"p{t}:" + name] = p
-        feat_dict["iqr:" + name] = feat_dict["p75:" + name] - feat_dict["p25:" + name]
+        feat_dict["iqr:" + name] = feat_dict["p80:" + name] - feat_dict["p20:" + name]
         return feat_dict
 
     # # # # # features # # # # #
@@ -143,8 +141,11 @@ class FeatureExtractor(BaseFeatureExtractor):
         sequences: list[SeqRecord],
         psa_config: dict = None,
         track_perf: bool = False,
+        validate: Literal["warn", "error"] = "error",
     ):
         super().__init__(sequences, track_perf)
+
+        self._validate_inputs(validate)
 
         config = self._init_psa_config()
         if psa_config is None:
@@ -156,6 +157,23 @@ class FeatureExtractor(BaseFeatureExtractor):
     # ----------------------------------------------
     # --------------- INIT HELPERS -----------------
     # ----------------------------------------------
+
+    def _validate_inputs(self, validate: Literal["warn", "error"]):
+        n = len(self._sequences)
+        if n <= 2:
+            msg = f"WARNING: Need at least 3 sequences, found {n}"
+            if validate == "error":
+                raise ValueError(msg)
+            else:
+                print(msg)
+
+        k = min(len(seq) for seq in self._sequences)
+        if k <= 1:
+            msg = f"WARNING: Found sequence with length {k}"
+            if validate == "error":
+                raise ValueError(msg)
+            else:
+                print(msg)
 
     def _init_psa_config(self) -> dict[str, dict]:
         config = {}
@@ -267,15 +285,29 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     @_feature
-    def _sequence_js_divergence(self) -> dict[str, list]:
+    def _char_js_divergence(self) -> dict[str, list]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
-        name = "js_divergence"
-        dists = self._get_cached(self._CHAR_DIST).clip(eps)
-        comb_idxs = np.array(list(itertools.combinations(np.arange(len(dists)), r=2))).T
-        # js = jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
-        js = self._jensenshannon(dists[comb_idxs[0]], dists[comb_idxs[1]], axis=1)
+        name = "js_char"
+        dist = self._get_cached(self._CHAR_DIST).clip(eps)
+        comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
+        js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
         feat_dict = self.descriptive_statistics(js, name)
+        return feat_dict
+
+    @_feature
+    def _homopolymer_js_divergence(self) -> dict[str, list]:
+        """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
+        eps = 1e-8
+        name = "js_hpoly"
+        tags = ["count", "len"]
+        dists = utils.repeat_distributions(self._sequences)
+        feat_dict = {}
+        for tag, dist in zip(tags, dists):
+            dist = dist.clip(eps)
+            comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
+            js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
+            feat_dict.update(self.descriptive_statistics(js, name + "_" + tag))
         return feat_dict
 
     @_feature
@@ -298,8 +330,8 @@ class FeatureExtractor(BaseFeatureExtractor):
                     feats[key].append(float(val.strip()))
         del feats[name + "_file-bytes"]  # Redundant, same as sequence length
         feat_dict = {}
-        for name, feat in feats.items():
-            feat_dict.update(self.descriptive_statistics(feat, name))
+        for key, feat in feats.items():
+            feat_dict.update(self.descriptive_statistics(feat, key))
         return feat_dict
 
     @_feature
@@ -411,7 +443,7 @@ class FeatureExtractor(BaseFeatureExtractor):
             feat_dict.update(self.descriptive_statistics(vals, tag))
         return feat_dict
 
-    # @_feature
+    @_feature
     def _kmer_similarity(self) -> dict[str, list]:
         """Computes features based on k-mers."""
         name = "mer"
@@ -433,7 +465,7 @@ class FeatureExtractor(BaseFeatureExtractor):
             counts = np.array(list(lookup_table.values()))
             feat_dict[str(k) + name + "_count"] = len(counts) / counts.sum()
             probs = counts / sum(counts)
-            feat_dict[str(k) + name + "_ent"] = -np.sum(probs * np.log2(probs))
+            feat_dict[str(k) + name + "_ent"] = utils.shannon_entropy(probs)
             # feat_dict.update(self.descriptive_statistics(counts, str(k) + name))
             # possible = min(n - k + 1, 4**k)
 
@@ -504,15 +536,6 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         return distributions
 
-    def _jensenshannon(self, p, q, axis):
-        p = p / np.sum(p, axis=axis, keepdims=True)
-        q = q / np.sum(q, axis=axis, keepdims=True)
-        m = (p + q) / 2
-        left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
-        right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
-        js = np.sqrt((left + right) / 2)
-        return js
-
     def _get_pairwise_alignments(self):
         datatype = self._cache[self._DTYPE]
         al_mat = self._psa_config[datatype]["matrix"]
@@ -534,7 +557,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         # Compute sets of pairwise alignments
         for seq_group in utils.sample_index_tuples(n, r=group_size, k=max_num_groups):
             groupings.append(seq_group)
-            for seq_pair in itertools.combinations(seq_group, r=2):
+            for seq_pair in it.combinations(seq_group, r=2):
                 idx_q, idx_r = seq_pair
                 if (idx_q in psas) and (idx_r in psas[idx_q]):
                     # Already processed this alignment in another group
@@ -563,7 +586,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         GAP_ORD = int_type(ord(GAP_CHAR))
         index_map = defaultdict(dict)
         for group in self._cache[self._PSA_GROUPS]:
-            for idx_a, idx_b in itertools.product(group, group):
+            for idx_a, idx_b in it.product(group, group):
                 duplicate_idx = idx_a == idx_b
                 done = (idx_a in index_map) and (idx_b in index_map[idx_a])
                 if duplicate_idx or done:
@@ -586,7 +609,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         for group in groups:
             group_scores = []
             # Loop over all pairwise combinations (with replacement)
-            for idx_pair in itertools.product(group, group):
+            for idx_pair in it.product(group, group):
                 idx_a, idx_c = idx_pair
                 if idx_a == idx_c:
                     continue
@@ -664,7 +687,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     """
     #     distances = []
     #     sequences = SeqIO.parse(self._sequences.file_path, format="fasta")
-    #     for seq1, seq2 in itertools.combinations(sequences, r=2):
+    #     for seq1, seq2 in it.combinations(sequences, r=2):
     #         h1 = sequence_perceptual_hash(
     #             seq1.seq, self._sequences.data_type, hash_size
     #         )
