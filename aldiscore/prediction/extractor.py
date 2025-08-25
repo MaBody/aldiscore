@@ -327,7 +327,15 @@ class FeatureExtractor(BaseFeatureExtractor):
                 for key, val in zip(keys[1:], lines[1][1:]):
                     if key.endswith("monte-carlo-pi"):
                         continue
-                    feats[key].append(float(val.strip()))
+                    elif key.endswith("chi-square"):
+                        # Correlates almost perfectly with seq_length
+                        eps = 1  # Instability only with unrealistically short sequences
+                        key = name + "_" + "inv-chi-square"
+                        val = len(seq) / (float(val.strip()) + eps)
+                    else:
+                        val = float(val.strip())
+                    feats[key].append(val)
+
         del feats[name + "_file-bytes"]  # Redundant, same as sequence length
         feat_dict = {}
         for key, feat in feats.items():
