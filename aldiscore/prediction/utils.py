@@ -59,17 +59,13 @@ def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
     return site_codes
 
 
-def repeat_distributions(sequences: list[SeqRecord]) -> tuple[np.ndarray]:
+def repeat_distributions(seq_arrs: list[np.ndarray]) -> tuple[np.ndarray]:
     """
     Occurrences of homopolymers and their lengths.
     """
-    count_table = defaultdict(partial(np.zeros, shape=len(sequences)))
-    len_table = defaultdict(partial(np.zeros, shape=len(sequences)))
-    for i, seq_record in enumerate(sequences):
-        seq = str(seq_record.seq).upper()
-        # n = len(seq)
-        # if n == 0:
-        #     continue
+    count_table = defaultdict(partial(np.zeros, shape=len(seq_arrs)))
+    len_table = defaultdict(partial(np.zeros, shape=len(seq_arrs)))
+    for i, seq in enumerate(seq_arrs):
 
         # Homopolymers via groupby
         for _, group in itertools.groupby(seq):
@@ -81,16 +77,14 @@ def repeat_distributions(sequences: list[SeqRecord]) -> tuple[np.ndarray]:
 
     count_arr = np.stack(list(count_table.values()), axis=1)
     len_arr = np.stack(list(len_table.values()), axis=1)
-    # count_arr = np.log(np.stack(list(count_table.values()), axis=1) + 1)
-    # len_arr = np.log(np.stack(list(len_table.values()), axis=1) + 1)
     count_arr = count_arr / count_arr.sum(axis=1, keepdims=True)
     len_arr = len_arr / len_arr.sum(axis=1, keepdims=True)
-    # repeat_lens = np.array(list(len_table.keys()), dtype=int_type)
     return count_arr, len_arr
 
 
-def shannon_entropy(probs: np.ndarray):
-    return -np.sum(probs * np.log2(probs))
+def shannon_entropy(probs: np.ndarray, axis: int = None):
+    dist = probs / probs.sum(axis=axis, keepdims=axis is not None)
+    return -np.sum(dist * np.log2(dist), axis=axis)
 
 
 def js_divergence(p: np.ndarray, q: np.ndarray, axis: int):

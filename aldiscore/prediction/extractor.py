@@ -6,12 +6,8 @@ import pandas as pd
 import numpy as np
 from collections import Counter
 from typing import Literal, Optional
-from Bio import Align, SeqIO
 from Bio.SeqRecord import SeqRecord
-import Bio.SeqRecord
 from abc import ABC
-from scipy.spatial.distance import jensenshannon
-from scipy.special import kl_div
 import itertools as it
 from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
@@ -24,8 +20,7 @@ import subprocess
 from collections import defaultdict
 from time import perf_counter
 import parasail
-import sys
-
+from functools import partial
 
 _FEATURE_FLAG = "_is_feature"
 _LOG_TIME = True
@@ -127,6 +122,7 @@ class BaseFeatureExtractor(ABC):
 
 
 class FeatureExtractor(BaseFeatureExtractor):
+    _SEQ_ORD = "seq_ord"
     _SEQ_LEN = "seq_length"
     _CHAR_DIST = "char_dist"
     _PSA = "psa"
@@ -187,6 +183,10 @@ class FeatureExtractor(BaseFeatureExtractor):
     # _init_cache needs to be called as a feature to support performance logs
     def _init_cache(self) -> dict[str, str]:
         self._cache.clear()
+        self._cache[self._SEQ_ORD] = [
+            list(map(ord, str(seq_record.seq).upper()))
+            for seq_record in self._sequences
+        ]
         self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
         self._cache[self._SEQ_LEN] = np.array([len(seq) for seq in self._sequences])
 
@@ -289,6 +289,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
         name = "js_char"
+        # Re-normalized in utils.js_divergence
         dist = self._get_cached(self._CHAR_DIST).clip(eps)
         comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
         js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
@@ -301,9 +302,10 @@ class FeatureExtractor(BaseFeatureExtractor):
         eps = 1e-8
         name = "js_hpoly"
         tags = ["count", "len"]
-        dists = utils.repeat_distributions(self._sequences)
+        dists = utils.repeat_distributions(self._get_cached(self._SEQ_ORD))
         feat_dict = {}
         for tag, dist in zip(tags, dists):
+            # Re-normalized in utils.js_divergence
             dist = dist.clip(eps)
             comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
             js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
@@ -452,30 +454,36 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _kmer_similarity(self) -> dict[str, list]:
-        """Computes features based on k-mers."""
+    def _kmer_similarity(self) -> dict[str, float]:
         name = "mer"
-        Ks = [2, 3, 5, 7]
-        seqs = [
-            list(map(ord, str(seq_record.seq).upper()))
-            for seq_record in self._sequences
-        ]
+        Ks = [3, 5, 7, 9]
+        eps = 1e-8
         feat_dict = {}
+        seqs = self._get_cached(self._SEQ_ORD)
         for k in Ks:
-            lookup_table = defaultdict(int)
-            for seq in seqs:
+            count_table = defaultdict(
+                partial(np.zeros, shape=len(self._sequences), dtype=np.int32)
+            )
+            for i, seq in enumerate(seqs):
                 n = len(seq)
                 if n < k:
                     continue
+                for kmer in (tuple(seq[i : i + k]) for i in range(n - k + 1)):
+                    count_table[hash(kmer)][i] += 1
 
-                for kmer in {tuple(seq[i : i + k]) for i in range(n - k + 1)}:
-                    lookup_table[kmer] += 1
-            counts = np.array(list(lookup_table.values()))
-            feat_dict[str(k) + name + "_count"] = len(counts) / counts.sum()
-            probs = counts / sum(counts)
-            feat_dict[str(k) + name + "_ent"] = utils.shannon_entropy(probs)
-            # feat_dict.update(self.descriptive_statistics(counts, str(k) + name))
-            # possible = min(n - k + 1, 4**k)
+            dist = np.stack(list(count_table.values()), axis=1)
+            # If n < k (very short sequences), filter out
+            dist = dist[dist.sum(axis=1) != 0]
+            # Re-normalized in utils.js_divergence and utils.shannon_entropy
+            dist = (dist / dist.sum(axis=1, keepdims=True)).clip(eps)
+            comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
+            js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
+            feat_dict.update(self.descriptive_statistics(js, str(k) + name + "_js"))
+
+            entros = utils.shannon_entropy(dist, axis=1)
+            feat_dict.update(
+                self.descriptive_statistics(entros, str(k) + name + "_ent")
+            )
 
         return feat_dict
 
@@ -666,7 +674,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return max_len / len(self._cache[self._PSA][idx_pair[1]][idx_pair[0]])
 
     def _gap_lengths(self, idx_pair: tuple[int], name: str) -> np.ndarray:
-        """Average gap lengths."""
+        """Returns gap length at end of every gap region (else 0)."""
         gap_ord = self._cache[self._INT_TYPE](ord(GAP_CHAR))
         al = np.stack(
             [
