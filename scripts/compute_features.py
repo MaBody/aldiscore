@@ -9,10 +9,6 @@ import multiprocessing as mp
 from functools import partial
 import datetime
 
-import warnings
-
-# warnings.simplefilter("error", RuntimeWarning)
-
 _DONE = "DONE"
 _TRACK_PERF = True
 
@@ -47,6 +43,7 @@ def process_queue(queue: mp.Queue):
         msg = queue.get()  # Read from the queue
         done = msg == _DONE
         if done:
+            # If done and elements unsaved, set counter to 0 to save them
             if len(perf_dicts) > 0:
                 counter = 0
         else:
@@ -55,6 +52,7 @@ def process_queue(queue: mp.Queue):
             counter += 1
 
         if counter % 500 == 0:
+            # Store every 500 completions to save bandwidth
             perf_df = pd.DataFrame(perf_dicts.values())
             perf_df.index = pd.MultiIndex.from_tuples(
                 perf_dicts.keys(), names=["source", "dataset"]
