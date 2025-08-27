@@ -23,7 +23,6 @@ import parasail
 from functools import partial
 
 _FEATURE_FLAG = "_is_feature"
-_LOG_TIME = True
 
 
 def _feature(func):
@@ -96,9 +95,6 @@ class BaseFeatureExtractor(ABC):
 
     def _get_cached(self, name: str):
         return self._cache.get(name)
-
-    def _set_cached(self, name: str, val):
-        self._cache[name] = val
 
     @classmethod
     def descriptive_statistics(cls, series: list, name: str | StringEnum):
@@ -175,7 +171,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 1000  # TODO: make dynamic (depending on data size)
+        config["MAX_COUNT"] = 1000
         config["GROUP_SIZE"] = 3
         return config
 
@@ -206,35 +202,35 @@ class FeatureExtractor(BaseFeatureExtractor):
     # ------------------------------------------
 
     @_feature
-    def _data_type(self) -> dict[str, list]:
+    def _data_type(self) -> dict[str, bool]:
         name = "is_dna"
         feat = self._cache[self._DTYPE].upper() == "DNA"
         feat_dict = {name: feat}
         return feat_dict
 
     @_feature
-    def _num_sequences(self) -> dict[str, list]:
+    def _num_sequences(self) -> dict[str, int]:
         name = "num_seqs"
         feat = len(self._sequences)
         feat_dict = {name: feat}
         return feat_dict
 
     # @_feature
-    # def _num_unique_sequences(self) -> dict[str, list]:
+    # def _num_unique_sequences(self) -> dict[str, float]:
     #     name = "n_unique_sequences"
     #     feat = len(set(seq.seq for seq in self._dataset.sequences))
     #     feat_dict = {name: feat}
     #     return feat_dict
 
     @_feature
-    def _sequence_length(self) -> dict[str, list]:
+    def _sequence_length(self) -> dict[str, float]:
         name = "seq_length"
         feat = self._get_cached(self._SEQ_LEN)
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
     @_feature
-    def _sequence_length_ratio(self) -> dict[str, list]:
+    def _sequence_length_ratio(self) -> dict[str, float]:
         name = "seq_length_ratio"
         seq_lengths = self._get_cached(self._SEQ_LEN)
         feat = min(seq_lengths) / max(seq_lengths)
@@ -242,7 +238,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _lower_bound_gap_percentage(self) -> dict[str, list]:
+    def _lower_bound_gap_percentage(self) -> dict[str, float]:
         name = "lower_bound_gap_percentage"
         seq_lengths = self._get_cached(self._SEQ_LEN)
         feat = 1 - np.mean(seq_lengths) / max(seq_lengths)
@@ -250,7 +246,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     # @_feature
-    # def _sequence_length_taxa_ratio(self) -> dict[str, list]:
+    # def _sequence_length_taxa_ratio(self) -> dict[str, float]:
     #     name = "seq_length_taxa_ratio"
     #     seq_lengths = [len(seq) for seq in self._sequences]
     #     feat = seq_lengths / len(self._sequences)
@@ -259,7 +255,7 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     # # TODO: Included in FRST randomness features!
     # @_feature
-    # def _sequence_entropy(self) -> dict[str, list]:
+    # def _sequence_entropy(self) -> dict[str, float]:
     #     """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
     #     eps = 1e-8
     #     name = "entropy"
@@ -270,7 +266,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     # @_feature
-    # def _sequence_cross_entropy(self) -> dict[str, list]:
+    # def _sequence_cross_entropy(self) -> dict[str, float]:
     #     """Computes the {min, max, mean ...} pairwise Cross-Entropy."""
     #     eps = 1e-8
     #     name = "cross_entropy"
@@ -285,7 +281,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     @_feature
-    def _char_js_divergence(self) -> dict[str, list]:
+    def _char_js_divergence(self) -> dict[str, float]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
         name = "js_char"
@@ -297,7 +293,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _homopolymer_js_divergence(self) -> dict[str, list]:
+    def _homopolymer_js_divergence(self) -> dict[str, float]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
         name = "js_hpoly"
@@ -313,7 +309,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _ent_randomness(self) -> dict[str, list]:
+    def _ent_randomness(self) -> dict[str, float]:
         name = "frst"
         ent_path = get_from_config("tools", "ent")
         feats = defaultdict(list)
@@ -345,7 +341,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _transitive_consistency(self) -> dict[str, list]:
+    def _transitive_consistency(self) -> dict[str, float]:
         """Computes measures of transitive consistency on the PSA groups."""
         name = "tc_base"
         similarity_func = lambda x, y: np.sum(x == y) / len(x)
@@ -357,19 +353,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     # @_feature
-    # def _transitive_consistency_dist(self) -> dict[str, list]:
-    #     """Computes measures of transitive consistency on the PSA groups."""
-    #     name = "tc_dist_abs"
-    #     similarity_func = lambda x, y: np.linalg.norm(x - y)
-    #     scores = self._compute_consistency(name, similarity_func)
-    #     feat_dict = {}
-    #     max_len = max(self._get_cached(self._SEQ_LEN))
-    #     for tag in scores:
-    #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-    #     return feat_dict
-
-    # @_feature
-    # def _transitive_consistency_dist_scaled(self) -> dict[str, list]:
+    # def _transitive_consistency_dist_scaled(self) -> dict[str, float]:
     #     """Computes measures of transitive consistency on the PSA groups."""
     #     name = "tc_dist_scaled"
     #     similarity_func = lambda x, y: np.linalg.norm(x - y)
@@ -381,20 +365,8 @@ class FeatureExtractor(BaseFeatureExtractor):
     #         feat_dict.update(self.descriptive_statistics(scaled, tag))
     #     return feat_dict
 
-    # @_feature
-    # def _transitive_consistency_dist_log(self) -> dict[str, list]:
-    #     """Computes measures of transitive consistency on the PSA groups."""
-    #     name = "tc_dist_log"
-    #     similarity_func = lambda x, y: np.log2(np.linalg.norm(x - y) + 1)
-    #     scores = self._compute_consistency(name, similarity_func)
-    #     feat_dict = {}
-    #     max_len = max(self._get_cached(self._SEQ_LEN))
-    #     for tag in scores:
-    #         feat_dict.update(self.descriptive_statistics(scores[tag], tag))
-    #     return feat_dict
-
     @_feature
-    def _psa_basic_features(self) -> dict[str, list]:
+    def _psa_basic_features(self) -> dict[str, float]:
         """Computes a bunch of features based on pairwise alignments of the unaligned sequences."""
         score_dict = defaultdict(list)
         al_scores = self._get_cached(self._PSA_SCORES)
@@ -415,7 +387,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _psa_gap_length(self) -> dict[str, list]:
+    def _psa_gap_length(self) -> dict[str, float]:
         """Computes features based on gap lengths."""
         name = "psa_gap_len"
         score_dict = defaultdict(list)
@@ -487,28 +459,6 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         return feat_dict
 
-    # @_feature
-    # def _perc_seq_hash_hamming_distance(self) -> dict[str, list]:
-    #     bit_suffix_lengths = [16]
-    #     suffixes = ["_16bit"]
-    #     feat_dict = {}
-    #     for bit_suffix_length, suffix in zip(bit_suffix_lengths, suffixes):
-    #         name = "perc_seq_hash_hamming" + suffix
-    #         feat = self._compute_hamming_distance(bit_suffix_length)
-    #         feat_dict.update(self.descriptive_statistics(feat, name))
-    #     return feat_dict
-
-    # @_feature
-    # def _kmer_similarity(self) -> dict[str, list]:
-    #     kmer_lengths = [5, 10]
-    #     suffixes = ["_5", "_10"]
-    #     feat_dict = {}
-    #     for kmer_length, suffix in zip(kmer_lengths, suffixes):
-    #         name = "kmer_similarity" + suffix
-    #         feat = self._compute_kmer_similarity(kmer_length)
-    #         feat_dict.update(self.descriptive_statistics(feat, name))
-    #     return feat_dict
-
     # ----------------------------------------------
     # --------------- MISC HELPERS -----------------
     # ----------------------------------------------
@@ -566,7 +516,6 @@ class FeatureExtractor(BaseFeatureExtractor):
         n = len(self._sequences)
         int_type = self._cache[self._INT_TYPE]
         psas = defaultdict(dict)
-        psa_nums = []
         scores = {}
         groupings = []
 
@@ -685,52 +634,3 @@ class FeatureExtractor(BaseFeatureExtractor):
         )
         gap_length_arr = utils.compute_gap_lengths(al, gap_ord)
         return gap_length_arr
-
-    # def _compute_hamming_distance(self, hash_size: Optional[int] = 16) -> list:
-    #     """
-    #     Computes the average perceptual hash hamming distance between all pairs of sequences in `sequences`.
-    #     See the `sequence_perceptual_hash` function in `utils.py` for details on perceptual hashing.
-
-    #     Parameters
-    #     ----------
-    #     hash_size : int, default=16
-    #         Length of the hash to compute and compare. The default length is 16.
-
-    #     Returns
-    #     -------
-    #     distances
-    #         The distances between the perceptual hashes of all pairs of sequences.
-    #     """
-    #     distances = []
-    #     sequences = SeqIO.parse(self._sequences.file_path, format="fasta")
-    #     for seq1, seq2 in it.combinations(sequences, r=2):
-    #         h1 = sequence_perceptual_hash(
-    #             seq1.seq, self._sequences.data_type, hash_size
-    #         )
-    #         h2 = sequence_perceptual_hash(
-    #             seq2.seq, self._sequences.data_type, hash_size
-    #         )
-    #         dist = normalized_hamming_dist(h1, h2)
-    #         distances.append(dist)
-    #     return distances
-
-    # def _compute_kmer_similarity(self, k: int, n_kmers: int) -> list:
-    #     if min(self._cache[self._SEQ_LEN]) < k:
-    #         print(f"WARNING: shortest sequence shorter than k-mer length with k={k}!")
-
-    #     n_seqs = len(self._sequences)
-    #     frequencies = []
-    #     rand_idxs = np.random.choice(n_seqs, size=k, replace=True)
-    #     for seq_idx in rand_idxs:
-    #         # 1. choose a random sequence
-    #         reference_sequence = np.random.choice(self._sequences.sequences).seq
-    #         # 2. choose a random k-mer of length k
-    #         start_idx = random.randint(0, len(reference_sequence) - k)
-    #         kmer = reference_sequence[start_idx : start_idx + k]
-    #         # 3. Count how many other sequences contain this k-mer
-    #         num_contains_kmer = len(
-    #             [seq for seq in self._sequences.sequences if kmer in seq.seq]
-    #         )
-    #         frequencies.append((num_contains_kmer - 1) / (n_seqs - 1))
-
-    #     return frequencies
