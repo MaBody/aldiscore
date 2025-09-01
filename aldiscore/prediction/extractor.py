@@ -50,13 +50,15 @@ class BaseFeatureExtractor(ABC):
         self._cache = {}
 
         self._track_perf = track_perf
+        if self._track_perf:
+            self._perf_dict = {}
+        else:
+            self._perf_dict = None
 
     def compute(self, exclude: list = None):
         "Runs all functions with the @_feature decorator and concatenates the output."
 
         features_dict = {}
-        if self._track_perf:
-            self._perf_dict = {}
         feature_funcs = self._get_feature_funcs()
         if exclude is not None:
             feature_funcs = list(
@@ -138,7 +140,6 @@ class FeatureExtractor(BaseFeatureExtractor):
         super().__init__(sequences, track_perf)
 
         self._validate_inputs(validate)
-
         config = self._init_psa_config()
         if psa_config is None:
             psa_config = {}
@@ -171,14 +172,38 @@ class FeatureExtractor(BaseFeatureExtractor):
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 1000
+        config["MAX_COUNT"] = 300
         config["GROUP_SIZE"] = 3
         return config
 
+    # ------------------------------------------
+    # --------- "HEAVY" INIT HELPERS -----------
+    # ------------------------------------------
+
+    # @_feature
+    # # _init_cache needs to be called as a feature to support performance logs
+    # def _init_cache(self) -> dict[str, str]:
+    #     self._cache[self._SEQ_ORD] = [
+    #         list(map(ord, str(seq_record.seq).upper()))
+    #         for seq_record in self._sequences
+    #     ]
+    #     self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
+    #     self._cache[self._SEQ_LEN] = np.array([len(seq) for seq in self._sequences])
+
+    #     will_overflow = self._cache[self._SEQ_LEN].max() >= 2**15
+    #     self._cache[self._INT_TYPE] = np.int32 if will_overflow else np.int16
+
+    #     self._cache[self._CHAR_DIST] = self._get_char_distributions()
+    #     alignments, groupings, scores = self._get_pairwise_alignments()
+    #     self._cache[self._PSA] = alignments
+    #     self._cache[self._PSA_GROUPS] = groupings
+    #     self._cache[self._PSA_SCORES] = scores
+    #     self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
+    #     return {}
+
     @_feature
     # _init_cache needs to be called as a feature to support performance logs
-    def _init_cache(self) -> dict[str, str]:
-        self._cache.clear()
+    def _init_basics(self) -> dict:
         self._cache[self._SEQ_ORD] = [
             list(map(ord, str(seq_record.seq).upper()))
             for seq_record in self._sequences
@@ -188,12 +213,23 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         will_overflow = self._cache[self._SEQ_LEN].max() >= 2**15
         self._cache[self._INT_TYPE] = np.int32 if will_overflow else np.int16
+        return {}
 
+    @_feature
+    def _init_char_dists(self) -> dict:
         self._cache[self._CHAR_DIST] = self._get_char_distributions()
+        return {}
+
+    @_feature
+    def _init_psa(self) -> dict:
         alignments, groupings, scores = self._get_pairwise_alignments()
         self._cache[self._PSA] = alignments
         self._cache[self._PSA_GROUPS] = groupings
         self._cache[self._PSA_SCORES] = scores
+        return {}
+
+    @_feature
+    def _init_psa_index_map(self) -> dict:
         self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
         return {}
 
@@ -590,7 +626,7 @@ class FeatureExtractor(BaseFeatureExtractor):
                         group_scores.append(
                             similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
                         )
-            # Compute summary statistics (6 scores per group if r=3)
+            # Compute summary statistics (6 consistency values per group if r=3)
             group_scores = np.array(group_scores)
             score_dict[name + "_min"].append(group_scores.min())
             score_dict[name + "_mean"].append(group_scores.mean())
