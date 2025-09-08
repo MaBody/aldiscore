@@ -11,6 +11,8 @@ import itertools
 from pathlib import Path
 import os
 import pandas as pd
+from sklearn.model_selection import train_test_split
+from aldiscore import RSTATE
 
 
 def sample_index_tuples(n: int, r: int, k: int):
@@ -170,3 +172,35 @@ def load_features(
         label_df = label_df[~nan_mask]
 
     return feat_df, drop_df, label_df
+
+
+def train_test_valid_split(index: pd.Index):
+    train_idxs, test_idxs = train_test_split(
+        index.to_list(), test_size=0.2, random_state=RSTATE
+    )
+    test_idxs, valid_idxs = train_test_split(
+        test_idxs, test_size=0.5, random_state=RSTATE
+    )
+    return train_idxs, valid_idxs, test_idxs
+
+
+def compute_metrics(model, X, y, eps):
+    y_pred = model.predict(X)
+    perf_dicts = []
+    rmse = (((y_pred - y) ** 2).sum() / len(y)) ** 0.5
+    rmse_cv = rmse / np.mean(y)
+    mae = (np.abs(y_pred - y)).sum() / len(y)
+    mape = (np.abs(y_pred - y) / (y + eps)).sum() / len(y)
+    mape_p50 = np.percentile(np.abs(y_pred - y) / (y + eps), 50)
+    corr = np.corrcoef(y, y_pred)[0, 1]
+    perf_dict = {}
+    perf_dict[f"RMSE"] = f"{rmse:.4f}"
+    perf_dict[f"RMSE_CV"] = f"{rmse_cv:.4f}"
+    perf_dict[f"MAE"] = f"{mae:.4f}"
+    perf_dict[f"MAPE"] = f"{mape:.4f}"
+    perf_dict[f"MAPE_P50"] = f"{mape_p50:.4f}"
+    perf_dict[f"CORR"] = f"{corr:.4f}"
+    perf_dicts.append(perf_dict)
+
+    perf_df = pd.DataFrame(perf_dicts)
+    return perf_df
