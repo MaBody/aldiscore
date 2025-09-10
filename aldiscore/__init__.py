@@ -4,6 +4,7 @@ import os
 
 ROOT = Path(__file__).parent.parent
 RSTATE = 42
+MODEL_DIR = ROOT / "aldiscore" / "prediction" / "models"
 
 
 def get_from_config(*keys: str, none_ok: bool = False):

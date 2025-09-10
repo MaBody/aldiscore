@@ -1,6 +1,8 @@
 import numpy as np
 from collections import defaultdict
 
+STAT_SEP = "."
+
 DNA_CHARS = np.array(list("ACGT"))
 AA_CHARS = np.array(list("ACDEFGHIKLMNPQRSTVWY"))
 
