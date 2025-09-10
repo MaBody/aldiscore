@@ -33,17 +33,19 @@ class DifficultyPredictor:
     def predict(
         self,
         sequences: list[SeqRecord | str] | Path,
-        format: str = "fasta",
-        is_aligned=False,
+        in_format: str = "fasta",
+        drop_gaps=False,
     ) -> float:
+
+        # ensure correct input format
         if self._is_path(sequences):
-            _sequences = list(SeqIO.parse(sequences, format=format))
+            _sequences = list(SeqIO.parse(sequences, format=in_format))
         elif isinstance(_sequences[0], str):
             _sequences = [SeqRecord(Seq(seq)) for seq in sequences]
         else:
             _sequences = sequences
 
-        if is_aligned:
+        if drop_gaps:
             records = []
             for seq in _sequences:
                 gapless = SeqRecord(Seq(str(seq.seq).replace(GAP_CHAR, "")), id=seq.id)

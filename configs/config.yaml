@@ -1,5 +1,5 @@
 models:
-  latest: v0.0.0.pkl
+  latest: v0.1
 
 tools:
   # ent: path/to/ent/binary

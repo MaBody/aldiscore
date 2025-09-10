@@ -1,19 +1,8 @@
 import argparse
-import os
-import sys
-
-# import pandas as pd
-
-# from aldiscore.prediction.extractor import FeatureExtractor
-# from aldiscore.prediction.predictor import DifficultyPredictor
-# from aldiscore.datastructures.ensemble import Ensemble
-# from aldiscore.scoring import pairwise, set_based
 import pathlib
 from rich_argparse import RichHelpFormatter, RawTextRichHelpFormatter
-from rich.table import Table
 from rich.console import Console
-from rich.markdown import Markdown
-from io import StringIO
+import shutil
 
 # from Bio.AlignIO import read
 
@@ -83,23 +72,39 @@ def handle_heuristic_mode(input_dir, strategy, output_format):
     # call pairwise handler
 
 
-def handle_predict_mode(input_path, model, seed):
+def handle_predict_mode(in_path, in_format, gap_char, drop_gaps, model, seed):
     """
     Handles prediction mode for predicting alignment difficulty.
 
-    :param input_path: Path to the unaligned FASTA file.
+    :param in_path: Path to the sequence file.
+    :param in_format: File format of the sequences.
+    :param gap_char: Gap character if working with aligned sequences.
+    :param drop_gaps: Indicates whether gaps must be dropped from the sequences.
     :param model: The model version to use for prediction.
     :param seed: The random seed for prediction.
     """
-    print("Predict:")
-    print(input_path, model, seed)
-    pass
+    from aldiscore.prediction.predictor import DifficultyPredictor
+
+    predictor = DifficultyPredictor(model)
+    return predictor.predict(in_path, in_format=in_format, drop_gaps=drop_gaps)
+
+
+def get_formatter_cls(cls):
+    formatter_class = lambda prog: cls(
+        prog,
+        max_help_position=40,  # indent before description starts
+        width=shutil.get_terminal_size(
+            (100, 20)
+        ).columns,  # let it span full terminal width
+    )
+    return formatter_class
 
 
 def main():
+
     parser = argparse.ArgumentParser(
         description="A command-line tool for alignment difficulty prediction and scoring.",
-        formatter_class=RichHelpFormatter,
+        formatter_class=get_formatter_cls(RichHelpFormatter),
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -108,33 +113,33 @@ def main():
     heuristic_parser = subparsers.add_parser(
         "heuristic",
         help="Compute alignment dispersion for an ensemble of alternative MSAs.",
-        formatter_class=RawTextRichHelpFormatter,
+        formatter_class=get_formatter_cls(RawTextRichHelpFormatter),
     )
     heuristic_parser.add_argument(
         "input_dir",
         type=pathlib.Path,
-        help="Path to input directory containing FASTA files of alternative MSAs.",
+        help="Path to input directory containing multiple MSA files on the same sequences.",
     )
     heuristic_parser.add_argument(
         "--strategy",
         type=str,
         default="d_pos",
         help=(
-            "Scoring strategy.\n"
-            "Pairwise: {d_ssp, d_seq, d_pos, d_phash}\n"
+            "Scoring strategy, defaults to 'd_pos'.\n"
+            "Pairwise:  {d_ssp, d_seq, d_pos, d_phash}\n"
             "Set-based: {conf_set, conf_entropy, conf_displace}"
         ),
     )
     heuristic_parser.add_argument(
-        "--format",
+        "--out_format",
         type=str,
         default="scalar",
         help="\n".join(
             (
-                "Output format.",
-                "Pairwise: {scalar, flat, matrix}",
+                "Output format, defaults to 'scalar'.",
+                "Pairwise:  {scalar, flat, matrix}",
                 "Set-based: {scalar, sequence, residue}",
-                "Defaults to scalar.",
+                "Defaults to 'scalar'",
             )
         ),
     )
@@ -142,31 +147,65 @@ def main():
     # Prediction
     predict_parser = subparsers.add_parser(
         "predict",
-        help="Predict alignment dispersion for a single (unaligned) FASTA file.",
-        formatter_class=RichHelpFormatter,
+        help="Predict alignment dispersion for an input file of multiple sequences.",
+        formatter_class=get_formatter_cls(RichHelpFormatter),
     )
-    predict_parser.add_argument("input_path", type=pathlib.Path)
+    predict_parser.add_argument(
+        "in_path",
+        type=pathlib.Path,
+        help="Path to sequence file.",
+    )
+    predict_parser.add_argument(
+        "--in_format",
+        type=str,
+        default="fasta",
+        help="Defaults to 'fasta'. File format of the input sequences. Must be supported by BioPython.",
+    )
+    predict_parser.add_argument(
+        "--drop_gaps",
+        type=bool,
+        default=True,
+        help="Defaults to True. If True, gaps in the input sequences are removed (only necessary for aligned input data).",
+    )
+    predict_parser.add_argument(
+        "--gap_char",
+        type=str,
+        default="-",
+        help="Defaults to '-'. Gap character (only relevant when working with aligned sequences).",
+    )
     predict_parser.add_argument(
         "--model",
         type=str,
         default="latest",
-        help="Pretrained model version. Defaults to 'latest'.",
+        help=" Defaults to 'latest'. Indicates the pretrained model version.",
     )
     predict_parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="Seed used for sampling in randomized features. Defaults to 42.",
+        help=" Defaults to 42. Seed used for sampling in randomized features.",
     )
-
     args = parser.parse_args()
 
     if args.command == "heuristic":
-        handle_heuristic_mode(args.input_dir, args.strategy, args.format)
+        out = handle_heuristic_mode(
+            args.in_path,
+            args.in_format,
+            args.gap_char,
+            args.strategy,
+            args.format,
+        )
     elif args.command == "predict":
-        handle_predict_mode(args.input_path, args.model, args.seed)
-
-    args = parser.parse_args()
+        out = handle_predict_mode(
+            args.in_path,
+            args.in_format,
+            args.gap_char,
+            args.drop_gaps,
+            args.model,
+            args.seed,
+        )
+    print(out)
+    return out
 
 
 if __name__ == "__main__":
