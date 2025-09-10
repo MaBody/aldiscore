@@ -12,7 +12,7 @@ import itertools as it
 from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
-from aldiscore.constants.constants import GAP_CHAR, GAP_CODE
+from aldiscore.constants.constants import GAP_CHAR, GAP_CODE, STAT_SEP
 import aldiscore.prediction.utils as utils
 import traceback
 import tempfile
@@ -102,18 +102,20 @@ class BaseFeatureExtractor(ABC):
     def descriptive_statistics(cls, series: list, name: str | StringEnum):
         """Computes a range of descriptive statistics on a series (min, max, mean, etc.)."""
         feat_dict = {}
-        feat_dict["min:" + name] = np.min(series)
-        feat_dict["max:" + name] = np.max(series)
-        feat_dict["mean:" + name] = np.mean(series)
-        feat_dict["std:" + name] = np.std(series)
+        feat_dict["min" + STAT_SEP + name] = np.min(series)
+        feat_dict["max" + STAT_SEP + name] = np.max(series)
+        feat_dict["mean" + STAT_SEP + name] = np.mean(series)
+        feat_dict["std" + STAT_SEP + name] = np.std(series)
         # thresholds = [1, 5, 10, 25, 40, 50, 60, 75, 90, 95, 99]
         thresholds = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
         # thresholds = [1, 5, 10, 25, 50, 75, 90, 95, 99]
 
         percentiles = np.percentile(series, thresholds)
         for t, p in zip(thresholds, percentiles):
-            feat_dict[f"p{t}:" + name] = p
-        feat_dict["iqr:" + name] = feat_dict["p80:" + name] - feat_dict["p20:" + name]
+            feat_dict[f"p{t}" + STAT_SEP + name] = p
+        feat_dict["iqr" + STAT_SEP + name] = (
+            feat_dict["p80" + STAT_SEP + name] - feat_dict["p20" + STAT_SEP + name]
+        )
         return feat_dict
 
     # # # # # features # # # # #
@@ -172,7 +174,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 300
+        config["MAX_COUNT"] = 1000
         config["GROUP_SIZE"] = 3
         return config
 
