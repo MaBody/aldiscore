@@ -37,10 +37,10 @@ from io import StringIO
 
 console = Console()
 
-heuristics = ["pairwise", "set-based"]
+heuristic_modes = ["pairwise", "set-based"]
 strategy_map = dict(
     zip(
-        heuristics,
+        heuristic_modes,
         [
             ["d_ssp", "d_seq", "d_pos", "d_phash"],
             ["conf_set", "conf_entropy", "conf_displace"],
@@ -49,7 +49,7 @@ strategy_map = dict(
 )
 format_map = dict(
     zip(
-        heuristics,
+        heuristic_modes,
         [
             ["scalar", "flat", "matrix"],
             ["scalar", "sequence", "residue"],
@@ -63,7 +63,7 @@ def handle_heuristic_mode(input_dir, strategy, output_format):
     Handles heuristic mode (pairwise or set_based) depending on strategy.
     """
 
-    for mode in heuristics:
+    for mode in heuristic_modes:
         strategy_valid = strategy in strategy_map[mode]
         format_valid = output_format in format_map[mode]
         if strategy_valid:
@@ -74,8 +74,8 @@ def handle_heuristic_mode(input_dir, strategy, output_format):
         )
     if not format_valid:
         raise ValueError(
-            f"Invalid format '{output_format}' for strategy '{strategy}'. "
-            f"Valid formats: {', '.join(format_map[strategy])}"
+            f"Invalid output format '{output_format}' for strategy '{strategy}'. "
+            f"Valid formats: {', '.join(format_map[mode])}"
         )
 
     print(mode)
