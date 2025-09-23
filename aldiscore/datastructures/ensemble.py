@@ -5,6 +5,8 @@ Provides an Ensemble class for storing, referencing, and accessing alignment set
 
 from aldiscore.datastructures.alignment import Alignment
 from aldiscore.datastructures.dataset import Dataset
+from pathlib import Path
+import os
 
 
 class Ensemble:
@@ -43,3 +45,15 @@ class Ensemble:
             self.dataset = dataset
 
         self.data_type = self.dataset.data_type
+
+    @classmethod
+    def load(cls, ensemble_dir: str | "Path", in_format: str = "fasta"):
+
+        from Bio.AlignIO import read
+
+        alignments = []
+        for msa_file in sorted(os.listdir(ensemble_dir)):
+            msa = read(ensemble_dir / msa_file, in_format)
+            alignment = Alignment(msa=msa, sort_sequences=False)
+            alignments.append(alignment)
+        return Ensemble(alignments)
