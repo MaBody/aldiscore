@@ -34,15 +34,12 @@ class _Metric(ABC):
         Output format: scalar, flat list, or square matrix.
     _cache : dict or None
         Cache for storing intermediate results.
-    _dtype : type
-        Numpy dtype used for positional encodings.
     """
 
     def __init__(
         self,
         format: Literal["scalar", "flat", "matrix"] = "scalar",
-        cache: dict = {},
-        dtype: type = np.int32,
+        cache: dict = None,
     ):
         """
         Initialize the metric with an optional cache.
@@ -54,13 +51,10 @@ class _Metric(ABC):
         cache : dict, optional
             Dictionary for caching intermediate results.
             Caching is applied by default. The parameter allows for re-using an existing cache.
-        dtype : type
-            Numpy dtype used for positional encodings.
         """
         super().__init__()
         self._format = format
-        self._cache = cache
-        self._dtype = dtype
+        self._cache = {} if cache is None else cache
 
     def compute(
         self,
@@ -192,7 +186,7 @@ class _Metric(ABC):
             list of sequence lengths, and maximum sequence length.
         """
         S = np.array(self._alignment_map[key].msa)
-        Q = encoding.gapped_index_mapping(S, self._dtype)
+        Q = encoding.gapped_index_mapping(S)
         K = len(S)
         L_k_list = [len(arr) for arr in Q]
         L_max = max(L_k_list)
@@ -271,7 +265,7 @@ class _HomologySetMetric(_Metric):
 
         def from_scratch(key):
             S, Q, K, L_k_list, L_max = self._get_metric_prerequisites(key)
-            A_code = encoding.encode_positions(S, encoding_enum, int_dtype=self._dtype)
+            A_code = encoding.encode_positions(S, encoding_enum)
             hcols_list, gap_mask_list = [], []
             for k in range(K):
                 hcols_list.append(np.delete(A_code[:, Q[k]], k, axis=0))
@@ -318,7 +312,7 @@ class _HomologySetMetric(_Metric):
 
         def from_scratch(key):
             S, Q, K, L_k_list, L_max = self._get_metric_prerequisites(key)
-            A_code = encoding.encode_positions(S, encoding_enum, int_dtype=self._dtype)
+            A_code = encoding.encode_positions(S, encoding_enum)
             hcols_list = []
             for k in range(K):
                 hcols_list.append(np.delete(A_code[:, Q[k]], k, axis=0))
@@ -345,7 +339,7 @@ class SSPDistance(_HomologySetMetric):
     Computes the SSP (symmetrized sum-of-pairs) distance between two alignments.
     """
 
-    enum = FE.SSP_DIST
+    enum = FE.D_SSP
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
@@ -373,7 +367,7 @@ class DSeqDistance(_HomologySetMetric):
     Computes the "D_seq" distance between two alignments.
     """
 
-    enum = FE.D_SEQ_DIST
+    enum = FE.D_SEQ
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
@@ -401,7 +395,7 @@ class DPosDistance(_HomologySetMetric):
     Computes the "D_pos" distance between two alignments.
     """
 
-    enum = FE.D_POS_DIST
+    enum = FE.D_POS
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
@@ -438,14 +432,14 @@ class PHashDistance(_Metric):
         Size of the hash in bits.
     """
 
-    enum = FE.PERC_HASH_HAMMING
+    enum = FE.D_PHASH
     name = None
 
     def __init__(
         self,
         hash_size: int = 16,
         format: Literal["scalar", "flat", "matrix"] = "scalar",
-        cache: dict = {},
+        cache: dict = None,
     ):
         """
         Initialize the perceptual hash distance metric.
@@ -463,7 +457,7 @@ class PHashDistance(_Metric):
         self.name = self.enum + f"_{hash_size}bit"
         self._hash_size = hash_size
         self._format = format
-        self._cache = cache
+        self._cache = {} if cache is None else cache
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
         """

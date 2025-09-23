@@ -32,8 +32,6 @@ class _ConfusionScore(ABC):
     ----------
     format : {"scalar", "sequence", "site"}, optional
         Aggregation strategy for the output (default: "scalar").
-    code_dtype : np.dtype, optional
-        Data type for encoded positions (default: np.int32).
     verbose : bool, optional
         Whether to show progress bars (default: False).
     """
@@ -41,12 +39,10 @@ class _ConfusionScore(ABC):
     def __init__(
         self,
         format: Literal["scalar", "sequence", "site"] = "scalar",
-        code_dtype: np.dtype = np.int32,
         verbose: bool = False,
     ):
         super().__init__()
         self._format = format
-        self._dtype = code_dtype
         self._verbose = verbose
 
     def compute(
@@ -111,15 +107,12 @@ class _ConfusionScore(ABC):
         self._N_max = max([alignment.shape[1] for alignment in ensemble.alignments])
         self._A_code_list = []
         self._Q_list = []
-        self._dtype = self._dtype
 
         for i in range(self._I):
             # Prepare encodings and mappings from unaligned to aligned index
             A = np.array(ensemble.alignments[i].msa)
-            self._Q_list.append(encoding.gapped_index_mapping(A, self._dtype))
-            A_code = encoding.encode_positions(
-                A, PositionalEncodingEnum.POSITION, self._dtype
-            )
+            self._Q_list.append(encoding.gapped_index_mapping(A))
+            A_code = encoding.encode_positions(A, PositionalEncodingEnum.POSITION)
             self._A_code_list.append(A_code)
 
     def _compute_replication_sets(self, k: int):
@@ -140,7 +133,7 @@ class _ConfusionScore(ABC):
         np.ndarray
             Array of shape (N_k, K, I) containing replication sets for sequence k.
         """
-        rcols = np.empty((self._N_k_list[k], self._K, self._I), dtype=self._dtype)
+        rcols = np.empty((self._N_k_list[k], self._K, self._I), dtype=np.int32)
         for i in range(self._I):
             rcols[:, :, i] = self._A_code_list[i][:, self._Q_list[i][k]].T
         return rcols
@@ -286,8 +279,6 @@ class ConfusionDisplace(_ConfusionScore):
         Weights for each threshold (default: uniform).
     format : {"scalar", "sequence", "site"}, optional
         Aggregation strategy for the output (default: "scalar").
-    code_dtype : np.dtype, optional
-        Data type for encoded positions (default: np.int32).
     verbose : bool, optional
         Whether to show progress bars (default: False).
     """
@@ -297,10 +288,9 @@ class ConfusionDisplace(_ConfusionScore):
         thresholds: list[int] = [0, 1, 2, 4, 8, 16, 32],
         weights: list[float] = [1, 1, 1, 1, 1, 1, 1],
         format: Literal["scalar", "sequence", "site"] = "scalar",
-        code_dtype: np.dtype = np.int32,
         verbose: bool = False,
     ):
-        super().__init__(format, code_dtype, verbose)
+        super().__init__(format, verbose)
         self._thresholds = np.array(thresholds)
         self._norm_weights = np.array(weights) / np.sum(weights)
 
