@@ -40,7 +40,7 @@ class DifficultyPredictor:
         # ensure correct input format
         if self._is_path(sequences):
             _sequences = list(SeqIO.parse(sequences, format=in_format))
-        elif isinstance(_sequences[0], str):
+        elif isinstance(sequences[0], str):
             _sequences = [SeqRecord(Seq(seq)) for seq in sequences]
         else:
             _sequences = sequences
