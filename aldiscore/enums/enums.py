@@ -72,12 +72,11 @@ class FeatureEnum(StringEnum):
         obj.pretty = pretty
         return obj
 
-    PERC_HASH_HAMMING = ("pHash", "pHash")
+    D_PHASH = ("d_phash", "pHash")
+    D_SSP = ("d_ssp", r"$d_{SSP}$")
+    D_SEQ = ("d_seq", r"$d_{seq}$")
+    D_POS = ("d_pos", r"$d_{pos}$")
 
-    SSP_DIST = ("d_SSP", r"$d_{SSP}$")
-    D_SEQ_DIST = ("d_seq", r"$d_{seq}$")
-    D_POS_DIST = ("d_pos", r"$d_{pos}$")
-
-    CONFUSION_SET = ("ConfSet", r"$\text{Conf}_{Set}$")
-    CONFUSION_ENTROPY = ("ConfEntropy", r"$\text{Conf}_{Entropy}$")
-    CONFUSION_DISPLACE = ("ConfDisplace", r"$\text{Conf}_{Displace}$")
+    CONF_SET = ("ConfSet", r"$\text{Conf}_{Set}$")
+    CONF_ENTROPY = ("ConfEntropy", r"$\text{Conf}_{Entropy}$")
+    CONF_DISPLACE = ("ConfDisplace", r"$\text{Conf}_{Displace}$")
