@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 from aldiscore import RSTATE
 
 
-def sample_index_tuples(n: int, r: int, k: int):
+def sample_index_tuples(n: int, r: int, k: int, seed: int):
     """
     This is necessary because itertools.combinations is inefficient for sampling + combinatorics.
     - n: index range
@@ -27,6 +27,10 @@ def sample_index_tuples(n: int, r: int, k: int):
     limit = np.minimum(max_comb, k)
     # prioritize_new = n < limit # TODO: implement or remove
     while True:
+        np.random.seed(seed)
+        # Ensure that seed is incremented, otherwise infinite loop here
+        seed += 1
+
         # Sample k r-tuples randomly -> (k,r)
         samples_new = np.sort(
             np.random.randint(low=0, high=n, size=2 * k * r).reshape(2 * k, r), axis=1

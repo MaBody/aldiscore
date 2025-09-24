@@ -30,7 +30,7 @@ class _ConfusionScore(ABC):
 
     Parameters
     ----------
-    format : {"scalar", "sequence", "site"}, optional
+    format : {"scalar", "sequence", "residue"}, optional
         Aggregation strategy for the output (default: "scalar").
     verbose : bool, optional
         Whether to show progress bars (default: False).
@@ -38,7 +38,7 @@ class _ConfusionScore(ABC):
 
     def __init__(
         self,
-        format: Literal["scalar", "sequence", "site"] = "scalar",
+        format: Literal["scalar", "sequence", "residue"] = "scalar",
         verbose: bool = False,
     ):
         super().__init__()
@@ -146,7 +146,7 @@ class _ConfusionScore(ABC):
         ----------
         site_vals : list
             List of confusion values per site.
-        format : {"scalar", "sequence", "site"}
+        format : {"scalar", "sequence", "residue"}
             Aggregation strategy.
 
         Returns
@@ -155,11 +155,11 @@ class _ConfusionScore(ABC):
             Aggregated confusion score(s).
         """
         if format == "scalar":
-            out = np.mean(np.concatenate(site_vals))
+            out = np.concatenate(site_vals).mean(dtype=float)
         elif format == "sequence":
-            out = np.array([np.mean(seq_dists) for seq_dists in site_vals])
-        elif format == "site":
-            return [seq_dists for seq_dists in site_vals]
+            out = [float(sum(seq_dists)) / len(seq_dists) for seq_dists in site_vals]
+        elif format == "residue":
+            return [seq_dists.tolist() for seq_dists in site_vals]
         else:
             raise ValueError(f"Unknown strategy {format}")
         return out
@@ -273,25 +273,25 @@ class ConfusionDisplace(_ConfusionScore):
 
     Parameters
     ----------
+    format : {"scalar", "sequence", "residue"}, optional
+        Aggregation strategy for the output (default: "scalar").
     thresholds : list[int], optional
         List of thresholds for displacement (default: [0, 1, 2, 4, 8, 16, 32]).
     weights : list[float], optional
         Weights for each threshold (default: uniform).
-    format : {"scalar", "sequence", "site"}, optional
-        Aggregation strategy for the output (default: "scalar").
     verbose : bool, optional
         Whether to show progress bars (default: False).
     """
 
     def __init__(
         self,
+        format: Literal["scalar", "sequence", "residue"] = "scalar",
         thresholds: list[int] = [0, 1, 2, 4, 8, 16, 32],
         weights: list[float] = [1, 1, 1, 1, 1, 1, 1],
-        format: Literal["scalar", "sequence", "site"] = "scalar",
         verbose: bool = False,
     ):
         super().__init__(format, verbose)
-        self._thresholds = np.array(thresholds)
+        self._thresholds = np.array(thresholds, dtype=np.int32)
         self._norm_weights = np.array(weights) / np.sum(weights)
 
     def _seq_confusion(self, rcols, k):

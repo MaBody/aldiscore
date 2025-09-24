@@ -51,8 +51,8 @@ class DataTypeEnum(StringEnum):
     # # # # # Scoring Methods # # # # #
 
 
-class FeatureEnum(StringEnum):
-    """Taxonomy of the features computed on MSA aligner output.
+class MethodEnum(StringEnum):
+    """Ensemble dispersion heuristics.
 
     Parameters
     ----------

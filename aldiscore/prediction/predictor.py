@@ -16,7 +16,9 @@ from Bio.SeqRecord import SeqRecord
 
 class DifficultyPredictor:
     def __init__(
-        self, model: "lgb.Booster" | Literal["latest", "vX.Y"] | Path = "latest"
+        self,
+        model: "lgb.Booster" | Literal["latest", "vX.Y"] | Path = "latest",
+        seed: int = 0,
     ):
         if self._is_path(model):
             self.model: "lgb.Booster" = lgb.Booster(model_file=Path(model))
@@ -30,13 +32,14 @@ class DifficultyPredictor:
         else:  # Try to use directly
             self.model = model
 
+        self.seed = seed
+
     def predict(
         self,
         sequences: list[SeqRecord | str] | Path,
         in_format: str = "fasta",
-        drop_gaps=False,
+        drop_gaps: bool = True,
     ) -> float:
-
         # ensure correct input format
         if self._is_path(sequences):
             _sequences = list(SeqIO.parse(sequences, format=in_format))
@@ -53,7 +56,7 @@ class DifficultyPredictor:
             _sequences = records
 
         # extract features
-        feat_df = FeatureExtractor(_sequences).compute()
+        feat_df = FeatureExtractor(_sequences, seed=self.seed).compute()
         model_feats = self.model.feature_name()
         feat_df = feat_df[model_feats]
         # predict difficulty

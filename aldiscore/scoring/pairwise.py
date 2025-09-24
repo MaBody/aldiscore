@@ -10,7 +10,7 @@ import numpy as np
 from abc import ABC
 from aldiscore.scoring import utils
 from aldiscore.scoring import encoding
-from aldiscore.enums.enums import FeatureEnum as FE, PositionalEncodingEnum
+from aldiscore.enums.enums import MethodEnum as ME, PositionalEncodingEnum
 from aldiscore.constants.constants import GAP_CODE, GAP_CHAR
 from aldiscore.datastructures.ensemble import Ensemble
 from aldiscore.datastructures.alignment import Alignment
@@ -26,7 +26,7 @@ class _Metric(ABC):
 
     Attributes
     ----------
-    enum : FeatureEnum
+    enum : MethodEnum
         Enum identifier for the metric.
     name : str
         Name of the metric.
@@ -424,7 +424,7 @@ class PHashDistance(_Metric):
 
     Attributes
     ----------
-    enum : FeatureEnum
+    enum : MethodEnum
         Enum identifier for the metric.
     name : str
         Name of the metric, includes hash size.

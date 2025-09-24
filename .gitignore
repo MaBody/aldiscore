@@ -12,6 +12,7 @@ snake_*.smk
 logs/
 *.npy
 *.parquet
+todos.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

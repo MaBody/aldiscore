@@ -138,6 +138,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         psa_config: dict = None,
         track_perf: bool = False,
         validate: Literal["warn", "error"] = "error",
+        seed: int = 0,
     ):
         super().__init__(sequences, track_perf)
 
@@ -148,6 +149,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         config["DNA"].update(psa_config.get("DNA", {}))
         config["AA"].update(psa_config.get("AA", {}))
         self._psa_config = config
+        self._seed = seed
 
     # ----------------------------------------------
     # --------------- INIT HELPERS -----------------
@@ -558,7 +560,9 @@ class FeatureExtractor(BaseFeatureExtractor):
         groupings = []
 
         # Compute sets of pairwise alignments
-        for seq_group in utils.sample_index_tuples(n, r=group_size, k=max_num_groups):
+        for seq_group in utils.sample_index_tuples(
+            n, r=group_size, k=max_num_groups, seed=self._seed
+        ):
             groupings.append(seq_group)
             for seq_pair in it.combinations(seq_group, r=2):
                 idx_q, idx_r = seq_pair

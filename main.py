@@ -3,6 +3,8 @@ import pathlib
 from rich_argparse import RichHelpFormatter, RawTextRichHelpFormatter
 from rich.console import Console
 import shutil
+from aldiscore.enums.enums import MethodEnum as ME
+import sys
 
 # from Bio.AlignIO import read
 
@@ -13,12 +15,12 @@ import shutil
 
 # CLI structure: aldiscore (base command), then sub-command, then options
 # Pairwise mode (input: folder with alternative MSAs in FASTA format)
-# aldiscore heuristic <input_dir> [--strategy={d_ssp, d_seq, d_pos, d_phash}] [--format={scalar, flat, matrix}]
-# default: aldiscore heuristic <input_dir> --strategy=d_pos --format=scalar
+# aldiscore heuristic <input_dir> [--method={d_ssp, d_seq, d_pos, d_phash}] [--format={scalar, flat, matrix}]
+# default: aldiscore heuristic <input_dir> --method=d_pos --format=scalar
 
 # Set-based mode (input: folder with alternative MSAs in FASTA format)
-# aldiscore heuristic <input_dir> [--strategy={conf_set, conf_entropy, conf_displace}] [--format={scalar, sequence, residue}]
-# default: aldiscore heuristic <input_dir> --strategy=conf_entropy --format=scalar
+# aldiscore heuristic <input_dir> [--method={conf_set, conf_entropy, conf_displace}] [--format={scalar, sequence, residue}]
+# default: aldiscore heuristic <input_dir> --method=conf_entropy --format=scalar
 
 # Prediction mode (input: unaligned FASTA file)
 # aldiscore predict <input_file> [--model={latest, vX.Y}] [--seed={1,2,3...}]
@@ -27,16 +29,16 @@ import shutil
 console = Console()
 
 heuristic_modes = ["pairwise", "set-based"]
-strategy_map = dict(
+mode_map = dict(
     zip(
         heuristic_modes,
         [
-            ["d_ssp", "d_seq", "d_pos", "d_phash"],
-            ["conf_set", "conf_entropy", "conf_displace"],
+            [ME.D_SSP, ME.D_SEQ, ME.D_POS, ME.D_PHASH],
+            [ME.CONF_SET, ME.CONF_ENTROPY, ME.CONF_DISPLACE],
         ],
     )
 )
-format_map = dict(
+out_type_map = dict(
     zip(
         heuristic_modes,
         [
@@ -47,45 +49,66 @@ format_map = dict(
 )
 
 
-def handle_heuristic_mode(input_dir, strategy, output_format):
+def handle_heuristic_mode(in_dir, in_format, method, out_type):
     """
-    Handles heuristic mode (pairwise or set_based) depending on strategy.
+    Handles heuristic mode (pairwise or set_based) depending on method.
     """
-
     for mode in heuristic_modes:
-        strategy_valid = strategy in strategy_map[mode]
-        format_valid = output_format in format_map[mode]
-        if strategy_valid:
+        method_valid = method in mode_map[mode]
+        out_type_valid = out_type in out_type_map[mode]
+        if method_valid:
             break
-    if not strategy_valid:
+    if not method_valid:
+        raise ValueError(f"Unknown method: {method}. Choose from {str(mode_map)}.")
+    if not out_type_valid:
         raise ValueError(
-            f"Unknown strategy: {strategy}. Choose from {str(strategy_map)}."
-        )
-    if not format_valid:
-        raise ValueError(
-            f"Invalid output format '{output_format}' for strategy '{strategy}'. "
-            f"Valid formats: {', '.join(format_map[mode])}"
+            f"Invalid output format '{out_type}' for method '{method}'. "
+            f"Valid formats: {', '.join(out_type_map[mode])}"
         )
 
-    print(mode)
-    print(strategy, input_dir, output_format)
-    # call pairwise handler
+    from aldiscore.datastructures.ensemble import Ensemble
+
+    # Load data
+    ensemble = Ensemble.load(ensemble_dir=in_dir, in_format=in_format)
+
+    if mode == "pairwise":
+
+        from aldiscore.scoring import pairwise
+
+        if method == ME.D_POS:
+            return pairwise.DPosDistance(out_type).compute(ensemble)
+        elif method == ME.D_SSP:
+            return pairwise.SSPDistance(out_type).compute(ensemble)
+        elif method == ME.D_SEQ:
+            return pairwise.DSeqDistance(out_type).compute(ensemble)
+        elif method == ME.D_PHASH:
+            return pairwise.PHashDistance(out_type).compute(ensemble)
+
+    if mode == "set-based":
+
+        from aldiscore.scoring import set_based
+
+        if method == ME.CONF_ENTROPY:
+            return set_based.ConfusionEntropy(out_type).compute(ensemble)
+        elif method == ME.CONF_SET:
+            return set_based.ConfusionSet(out_type).compute(ensemble)
+        elif method == ME.CONF_DISPLACE:
+            return set_based.ConfusionDisplace(out_type).compute(ensemble)
 
 
-def handle_predict_mode(in_path, in_format, gap_char, drop_gaps, model, seed):
+def handle_predict_mode(in_path, in_format, drop_gaps, model, seed):
     """
     Handles prediction mode for predicting alignment difficulty.
 
     :param in_path: Path to the sequence file.
     :param in_format: File format of the sequences.
-    :param gap_char: Gap character if working with aligned sequences.
     :param drop_gaps: Indicates whether gaps must be dropped from the sequences.
     :param model: The model version to use for prediction.
     :param seed: The random seed for prediction.
     """
     from aldiscore.prediction.predictor import DifficultyPredictor
 
-    predictor = DifficultyPredictor(model)
+    predictor = DifficultyPredictor(model, seed)
     return predictor.predict(in_path, in_format=in_format, drop_gaps=drop_gaps)
 
 
@@ -116,22 +139,28 @@ def main():
         formatter_class=get_formatter_cls(RawTextRichHelpFormatter),
     )
     heuristic_parser.add_argument(
-        "input_dir",
+        "in_dir",
         type=pathlib.Path,
         help="Path to input directory containing multiple MSA files on the same sequences.",
     )
     heuristic_parser.add_argument(
-        "--strategy",
+        "--in_format",
+        type=str,
+        default="fasta",
+        help="File format, defaults to 'fasta'.",
+    )
+    heuristic_parser.add_argument(
+        "--method",
         type=str,
         default="d_pos",
         help=(
-            "Scoring strategy, defaults to 'd_pos'.\n"
+            "Scoring method, defaults to 'd_pos'.\n"
             "Pairwise:  {d_ssp, d_seq, d_pos, d_phash}\n"
             "Set-based: {conf_set, conf_entropy, conf_displace}"
         ),
     )
     heuristic_parser.add_argument(
-        "--out_format",
+        "--out_type",
         type=str,
         default="scalar",
         help="\n".join(
@@ -153,7 +182,7 @@ def main():
     predict_parser.add_argument(
         "in_path",
         type=pathlib.Path,
-        help="Path to sequence file.",
+        help="Path to file containing multiple (unaligned) sequences.",
     )
     predict_parser.add_argument(
         "--in_format",
@@ -166,12 +195,6 @@ def main():
         type=bool,
         default=True,
         help="Defaults to True. If True, gaps in the input sequences are removed (only necessary for aligned input data).",
-    )
-    predict_parser.add_argument(
-        "--gap_char",
-        type=str,
-        default="-",
-        help="Defaults to '-'. Gap character (only relevant when working with aligned sequences).",
     )
     predict_parser.add_argument(
         "--model",
@@ -187,25 +210,33 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.command == "heuristic":
-        out = handle_heuristic_mode(
-            args.in_path,
-            args.in_format,
-            args.gap_char,
-            args.strategy,
-            args.format,
-        )
-    elif args.command == "predict":
-        out = handle_predict_mode(
-            args.in_path,
-            args.in_format,
-            args.gap_char,
-            args.drop_gaps,
-            args.model,
-            args.seed,
-        )
-    print(out)
-    return out
+    out = None
+    try:
+        if args.command == "heuristic":
+            out = handle_heuristic_mode(
+                in_dir=args.in_dir,
+                in_format=args.in_format,
+                method=args.method,
+                out_type=args.out_type,
+            )
+        elif args.command == "predict":
+            out = handle_predict_mode(
+                in_path=args.in_path,
+                in_format=args.in_format,
+                drop_gaps=args.drop_gaps,
+                model=args.model,
+                seed=args.seed,
+            )
+    except:
+        import traceback
+
+        sys.stderr.write(traceback.format_exc())
+        sys.exit(1)
+    else:
+        sys.stdout.write(str(out))
+        sys.stdout.flush()
+        sys.stderr.write("\n")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
