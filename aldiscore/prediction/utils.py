@@ -1,17 +1,14 @@
 import numpy as np
 from typing import Literal, Optional
 import itertools
-import random
 import math
 from aldiscore.scoring.encoding import _ffill_numpy_2d_axis_1
 from collections import defaultdict
-from Bio.SeqRecord import SeqRecord
 from functools import partial
 import itertools
 from pathlib import Path
 import os
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from aldiscore import RSTATE
 
 
@@ -179,6 +176,8 @@ def load_features(
 
 
 def train_test_valid_split(index: pd.Index):
+    from sklearn.model_selection import train_test_split
+
     train_idxs, test_idxs = train_test_split(
         index.to_list(), test_size=0.2, random_state=RSTATE
     )

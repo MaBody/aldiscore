@@ -1,8 +1,5 @@
 from aldiscore.prediction.extractor import FeatureExtractor
-import pandas as pd
-import numpy as np
 from typing import Literal
-import joblib  # TODO: switch to safer way of model loading
 from pathlib import Path
 import os
 from typing import TYPE_CHECKING

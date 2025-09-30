@@ -1,11 +1,7 @@
-import math
-from pathlib import Path
-import datetime
-import random
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import Literal, Optional
+from typing import Literal, Optional, TYPE_CHECKING
 from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
@@ -23,6 +19,8 @@ import parasail
 from functools import partial
 
 _FEATURE_FLAG = "_is_feature"
+
+# if TYPE_CHECKING:
 
 
 def _feature(func):

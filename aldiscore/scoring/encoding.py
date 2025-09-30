@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from aldiscore.enums.enums import PositionalEncodingEnum
 from aldiscore.constants.constants import GAP_CHAR, GAP_CODE
 
