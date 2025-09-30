@@ -279,7 +279,7 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _lower_bound_gap_percentage(self) -> dict[str, float]:
-        name = "lower_bound_gap_percentage"
+        name = "lbgp"
         seq_lengths = self._get_cached(self._SEQ_LEN)
         feat = 1 - np.mean(seq_lengths) / max(seq_lengths)
         feat_dict = {name: feat}
@@ -415,12 +415,12 @@ class FeatureExtractor(BaseFeatureExtractor):
             "psa_gap_ratio": self._alignment_gap_ratio,
             "psa_stretch_ratio": self._alignment_stretch_ratio,
         }
-        idx_cache = set()
         for name, func in func_map.items():
+            idx_cache = set()
             for idx_pair in al_scores:
                 if idx_pair not in idx_cache:
                     idx_cache.add(idx_pair)
-                    score_dict[name].append(func(idx_pair))
+                score_dict[name].append(func(idx_pair))
         feat_dict = {}
         for name, vals in score_dict.items():
             feat_dict.update(self.descriptive_statistics(vals, name))
@@ -455,10 +455,10 @@ class FeatureExtractor(BaseFeatureExtractor):
                     seq_means[0] = gap_len_arr[0, gap_ends[0]].mean()
                 if has_gaps[1]:
                     seq_means[1] = gap_len_arr[1, gap_ends[1]].mean()
-                diff = np.std(seq_means, ddof=1)
-                if diff > 0:
-                    diff /= seq_means.mean()
-                score_dict[name + "_logdiff"].append(np.log2(diff + 1))
+                # diff = np.std(seq_means, ddof=1)
+                # if diff > 0:
+                #     diff /= seq_means.mean()
+                # score_dict[name + "_logdiff"].append(np.log2(diff + 1))
 
         feat_dict = {}
         for tag, vals in score_dict.items():
@@ -468,7 +468,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     @_feature
     def _kmer_similarity(self) -> dict[str, float]:
         name = "mer"
-        Ks = [3, 5, 7, 9]
+        Ks = [5, 7, 9, 11]
         eps = 1e-8
         feat_dict = {}
         seqs = self._get_cached(self._SEQ_ORD)
