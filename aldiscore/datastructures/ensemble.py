@@ -3,6 +3,9 @@ Ensemble module for handling collections of replicate sequence alignments.
 Provides an Ensemble class for storing, referencing, and accessing alignment sets and their associated datasets.
 """
 
+import os
+from pathlib import Path
+from typing import Union
 from aldiscore.datastructures.alignment import Alignment
 from aldiscore.datastructures.dataset import Dataset
 
@@ -43,3 +46,15 @@ class Ensemble:
             self.dataset = dataset
 
         self.data_type = self.dataset.data_type
+
+    @classmethod
+    def load(cls, ensemble_dir: Union[str, "Path"], in_format: str = "fasta"):
+
+        from Bio.AlignIO import read
+
+        alignments = []
+        for msa_file in sorted(os.listdir(ensemble_dir)):
+            msa = read(ensemble_dir / msa_file, in_format)
+            alignment = Alignment(msa=msa, sort_sequences=False)
+            alignments.append(alignment)
+        return Ensemble(alignments)

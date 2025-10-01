@@ -5,7 +5,6 @@ from typing import Optional
 import itertools
 import numpy as np
 from numpy import typing as npt
-from scipy.fft import dct
 import pandas as pd
 from aldiscore.datastructures.ensemble import Ensemble
 from aldiscore.datastructures.alignment import Alignment
@@ -55,6 +54,8 @@ def run_cmd(
 
 
 def _perceptual_hash(image: npt.NDArray, size: Optional[int]) -> str:
+    from scipy.fft import dct
+
     dct_coeffs = dct(dct(image, axis=0), axis=1)
     binary_sequence = np.clip(np.sign(dct_coeffs), 0, 1)
 

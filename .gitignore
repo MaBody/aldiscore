@@ -9,6 +9,10 @@ results/
 trash/
 snake_*.smk
 .pytest_cache/
+logs/
+*.npy
+*.parquet
+todos.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

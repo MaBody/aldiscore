@@ -1,0 +1,6 @@
+models:
+  latest: v0.2
+
+tools:
+  # ent: path/to/ent/binary
+  # raxmlng: path/to/raxmlng/binary
