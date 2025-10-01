@@ -3,7 +3,7 @@ import yaml
 import os
 
 ROOT = Path(__file__).parent.parent
-RSTATE = 42
+RSTATE = 0
 MODEL_DIR = ROOT / "aldiscore" / "prediction" / "models"
 
 
