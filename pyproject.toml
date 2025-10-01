@@ -1,0 +1,40 @@
+[project]
+name = "aldiscore"
+description = "Python library for computing and predicting uncertainty in multiple sequence alignments."
+readme = {file = "README.md", content-type = "text/markdown"}
+authors = [{name = "Mattis Bodynek", email = "mattisbodynek@gmail.com"}]
+version = "1.0.0"
+license = "GPL-3.0-or-later"
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+requires-python = ">= 3.9, < 3.14"
+
+dependencies = [
+    "numpy>=2.0",
+    "scipy",
+    "pandas",
+    "biopython",
+    "lightgbm",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pyarrow"
+]
+
+[project.scripts]
+aldiscore = "aldiscore.main:main"
+
+
+[tool.ruff.lint]
+select = ["F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
