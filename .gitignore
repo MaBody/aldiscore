@@ -13,6 +13,8 @@ logs/
 *.npy
 *.parquet
 todos.md
+temp.py
+model.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
