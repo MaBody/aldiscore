@@ -3,7 +3,7 @@ from typing import Literal
 from pathlib import Path
 import os
 from typing import TYPE_CHECKING
-from aldiscore import get_from_config, ROOT, MODEL_DIR
+from aldiscore import get_from_config, ROOT
 from aldiscore.constants.constants import GAP_CHAR
 import lightgbm as lgb
 from Bio import SeqIO
@@ -24,7 +24,7 @@ class DifficultyPredictor:
             if model == "latest":
                 file_name = get_from_config("models", "latest")
             file_name += ".txt"
-            model_path = MODEL_DIR / file_name
+            model_path = ROOT / "models" / file_name
             self.model: "lgb.Booster" = lgb.Booster(model_file=model_path)
         else:  # Try to use directly
             self.model = model
@@ -61,13 +61,13 @@ class DifficultyPredictor:
         return pred
 
     def save(self, file_name: str) -> Path:
-        models = os.listdir(MODEL_DIR)
+        models = os.listdir(ROOT / "models")
         if file_name in models:
             raise ValueError(f"File '{file_name}' exists already")
         else:
-            self.model.save_model(MODEL_DIR / file_name)
+            self.model.save_model(ROOT / "models" / file_name)
 
-        return MODEL_DIR / file_name
+        return ROOT / "models" / file_name
 
     def _is_path(self, input):
         return isinstance(input, Path) or (
