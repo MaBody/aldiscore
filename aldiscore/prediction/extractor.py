@@ -291,17 +291,17 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     feat_dict = self.descriptive_statistics(feat, name)
     #     return feat_dict
 
-    # # TODO: Included in FRST randomness features!
-    # @_feature
-    # def _sequence_entropy(self) -> dict[str, float]:
-    #     """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
-    #     eps = 1e-8
-    #     name = "entropy"
-    #     dists = self._get_cached(self._CHAR_DIST).clip(eps)
-    #     dists = dists.clip(eps)
-    #     feat = -(dists * np.log2(dists)).sum(axis=1) / (-np.log2(1 / len(dists)))
-    #     feat_dict = self.descriptive_statistics(feat, name)
-    #     return feat_dict
+    # TODO: Included in FRST randomness features!
+    @_feature
+    def _sequence_entropy(self) -> dict[str, float]:
+        """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
+        eps = 1e-8
+        name = "char_ent"
+        dists = self._get_cached(self._CHAR_DIST).clip(eps)
+        dists = dists.clip(eps)
+        feat = -(dists * np.log2(dists)).sum(axis=1) / (-np.log2(1 / len(dists)))
+        feat_dict = self.descriptive_statistics(feat, name)
+        return feat_dict
 
     # @_feature
     # def _sequence_cross_entropy(self) -> dict[str, float]:
@@ -322,7 +322,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     def _char_js_divergence(self) -> dict[str, float]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
-        name = "js_char"
+        name = "char_js"
         # Re-normalized in utils.js_divergence
         dist = self._get_cached(self._CHAR_DIST).clip(eps)
         comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
@@ -334,7 +334,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     def _homopolymer_js_divergence(self) -> dict[str, float]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
-        name = "js_hpoly"
+        name = "hpoly_js"
         tags = ["count", "len"]
         dists = utils.repeat_distributions(self._get_cached(self._SEQ_ORD))
         feat_dict = {}
@@ -346,42 +346,42 @@ class FeatureExtractor(BaseFeatureExtractor):
             feat_dict.update(self.descriptive_statistics(js, name + "_" + tag))
         return feat_dict
 
-    @_feature
-    def _ent_randomness(self) -> dict[str, float]:
-        name = "frst"
-        ent_path = get_from_config("tools", "ent")
-        feats = defaultdict(list)
-        with tempfile.NamedTemporaryFile() as tmpfile:
-            for seq in self._sequences:
-                with open(tmpfile.name, "wb") as file:
-                    file.write(str(seq.seq).encode("utf-8"))
-                cmd = [ent_path, "-t", tmpfile.name]
-                out = subprocess.run(cmd, capture_output=True).stdout.decode("utf-8")
-                lines = [line.split(",") for line in out.splitlines()]
-                keys = [name + "_" + key.strip().lower() for key in lines[0]]
-                # Drop first position (csv index)
-                for key, val in zip(keys[1:], lines[1][1:]):
-                    if key.endswith("monte-carlo-pi"):
-                        continue
-                    elif key.endswith("chi-square"):
-                        # Correlates almost perfectly with seq_length
-                        eps = 1  # Instability only with unrealistically short sequences
-                        key = name + "_" + "inv-chi-square"
-                        val = len(seq) / (float(val.strip()) + eps)
-                    else:
-                        val = float(val.strip())
-                    feats[key].append(val)
+    # @_feature
+    # def _ent_randomness(self) -> dict[str, float]:
+    #     name = "frst"
+    #     ent_path = get_from_config("tools", "ent")
+    #     feats = defaultdict(list)
+    #     with tempfile.NamedTemporaryFile() as tmpfile:
+    #         for seq in self._sequences:
+    #             with open(tmpfile.name, "wb") as file:
+    #                 file.write(str(seq.seq).encode("utf-8"))
+    #             cmd = [ent_path, "-t", tmpfile.name]
+    #             out = subprocess.run(cmd, capture_output=True).stdout.decode("utf-8")
+    #             lines = [line.split(",") for line in out.splitlines()]
+    #             keys = [name + "_" + key.strip().lower() for key in lines[0]]
+    #             # Drop first position (csv index)
+    #             for key, val in zip(keys[1:], lines[1][1:]):
+    #                 if key.endswith("monte-carlo-pi"):
+    #                     continue
+    #                 elif key.endswith("chi-square"):
+    #                     # Correlates almost perfectly with seq_length
+    #                     eps = 1  # Instability only with unrealistically short sequences
+    #                     key = name + "_" + "inv-chi-square"
+    #                     val = len(seq) / (float(val.strip()) + eps)
+    #                 else:
+    #                     val = float(val.strip())
+    #                 feats[key].append(val)
 
-        del feats[name + "_file-bytes"]  # Redundant, same as sequence length
-        feat_dict = {}
-        for key, feat in feats.items():
-            feat_dict.update(self.descriptive_statistics(feat, key))
-        return feat_dict
+    #     del feats[name + "_file-bytes"]  # Redundant, same as sequence length
+    #     feat_dict = {}
+    #     for key, feat in feats.items():
+    #         feat_dict.update(self.descriptive_statistics(feat, key))
+    #     return feat_dict
 
     @_feature
     def _transitive_consistency(self) -> dict[str, float]:
         """Computes measures of transitive consistency on the PSA groups."""
-        name = "tc_base"
+        name = "psa_tc"
         similarity_func = lambda x, y: np.sum(x == y) / len(x)
         scores = self._compute_consistency(name, similarity_func)
 
@@ -438,25 +438,10 @@ class FeatureExtractor(BaseFeatureExtractor):
                 gap_len_arr = self._gap_lengths(idx_pair, name)
                 gap_ends = gap_len_arr > 0
                 has_gaps = gap_ends.any(axis=1)
-
                 gap_lens = gap_len_arr[gap_ends] if has_gaps.any() else np.array([0])
 
                 score_dict[name + "_mean"].append(gap_lens.mean())
-                score_dict[name + "_p50"].append(np.percentile(gap_lens, 50))
                 score_dict[name + "_std"].append(gap_lens.std())
-
-                iqr = np.percentile(gap_lens, 75) - np.percentile(gap_lens, 25)
-                score_dict[name + "_iqr"].append(iqr)
-
-                seq_means = np.zeros_like(has_gaps)
-                if has_gaps[0]:
-                    seq_means[0] = gap_len_arr[0, gap_ends[0]].mean()
-                if has_gaps[1]:
-                    seq_means[1] = gap_len_arr[1, gap_ends[1]].mean()
-                # diff = np.std(seq_means, ddof=1)
-                # if diff > 0:
-                #     diff /= seq_means.mean()
-                # score_dict[name + "_logdiff"].append(np.log2(diff + 1))
 
         feat_dict = {}
         for tag, vals in score_dict.items():
@@ -465,8 +450,8 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _kmer_similarity(self) -> dict[str, float]:
-        name = "mer"
-        Ks = [5, 7, 9, 11]
+        name = "-mer"
+        Ks = [4, 7, 10, 13]
         eps = 1e-8
         feat_dict = {}
         seqs = self._get_cached(self._SEQ_ORD)
