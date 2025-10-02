@@ -72,13 +72,14 @@ if __name__ == "__main__":
 
     data_dir = Path("/hits/fast/cme/bodynems/data/paper")
     sources = os.listdir(data_dir)
-    # sources = ["ox"]
+    sources.remove("treebase_v1")
+    sources = ["treebase_v1"] + sources
     print(f"Computing for sources: {sources}")
 
     print("Detected CPUs:", mp.cpu_count())
     cpu_counts = [min(100, mp.cpu_count() - 2)] * len(sources)
     if "treebase_v1" in sources:
-        cpu_counts[sources.index("treebase_v1")] = mp.cpu_count() - 2
+        cpu_counts[sources.index("treebase_v1")] = mp.cpu_count() - 20
 
     manager = mp.Manager()
     queue = manager.Queue() if _TRACK_PERF else None
