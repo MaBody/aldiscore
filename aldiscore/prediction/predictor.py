@@ -2,7 +2,7 @@ from aldiscore.prediction.extractor import FeatureExtractor
 from typing import Literal
 from pathlib import Path
 import os
-from typing import List, TYPE_CHECKING
+from typing import List, Union
 from aldiscore import get_from_config, ROOT
 from aldiscore.constants.constants import GAP_CHAR
 import lightgbm as lgb
@@ -14,7 +14,7 @@ from Bio.SeqRecord import SeqRecord
 class DifficultyPredictor:
     def __init__(
         self,
-        model: "lgb.Booster" | Literal["latest", "vX.Y"] | Path = "latest",
+        model: Union["lgb.Booster", Literal["latest", "vX.Y"], Path] = "latest",
         seed: int = 0,
     ):
         if self._is_path(model):
@@ -33,7 +33,7 @@ class DifficultyPredictor:
 
     def predict(
         self,
-        sequences: List[SeqRecord | str] | Path,
+        sequences: Union[List[SeqRecord], List[str], Path],
         in_format: str = "fasta",
         drop_gaps: bool = True,
     ) -> float:
@@ -42,7 +42,7 @@ class DifficultyPredictor:
             _sequences = list(SeqIO.parse(sequences, format=in_format))
         elif isinstance(sequences[0], str):
             _sequences = [SeqRecord(Seq(seq)) for seq in sequences]
-        else:
+        else:  # Assuming type SeqRecord here!
             _sequences = sequences
 
         if drop_gaps:

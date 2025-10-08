@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import List, Literal, Optional, TYPE_CHECKING
+from typing import List, Literal, Union
 from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
@@ -97,7 +97,7 @@ class BaseFeatureExtractor(ABC):
         return self._cache.get(name)
 
     @classmethod
-    def descriptive_statistics(cls, series: list, name: str | StringEnum):
+    def descriptive_statistics(cls, series: list, name: Union[str, StringEnum]):
         """Computes a range of descriptive statistics on a series (min, max, mean, etc.)."""
         feat_dict = {}
         feat_dict["min" + STAT_SEP + name] = np.min(series)

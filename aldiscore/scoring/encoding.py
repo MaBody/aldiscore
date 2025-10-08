@@ -121,7 +121,7 @@ def encode_positions(
     return site_codes
 
 
-def _ffill_numpy_2d_axis_1(A: np.ndarray, val: int | float):
+def _ffill_numpy_2d_axis_1(A: np.ndarray, val):
     axis = 1
     """Forward fill A where A == val for 2d array along axis 1."""
     mask = A == val
@@ -131,7 +131,7 @@ def _ffill_numpy_2d_axis_1(A: np.ndarray, val: int | float):
     return out
 
 
-def _ffill_numpy_3d_axis_2(A: np.ndarray, val: int | float):
+def _ffill_numpy_3d_axis_2(A: np.ndarray, val):
     """Forward fill A where A == val for 3d array along axis 2."""
     axis = 2
     mask = A == val
