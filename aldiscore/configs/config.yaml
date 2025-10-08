@@ -1,5 +1,5 @@
 models:
-  latest: v0.3
+  latest: v0.4
 
 tools:
   # ent: path/to/ent/binary
