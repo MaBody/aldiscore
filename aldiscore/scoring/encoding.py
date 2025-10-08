@@ -69,53 +69,50 @@ def encode_positions(
     seq_offsets = seq_offsets[:, np.newaxis]
     site_encoding = (~gap_mask).cumsum(axis=1, dtype=int_dtype) + seq_offsets
 
-    match encoding:
-        case PositionalEncodingEnum.UNIFORM:
-            gap_encoding = -gap_mask.astype(int_dtype)
+    if encoding == PositionalEncodingEnum.UNIFORM:
+        gap_encoding = -gap_mask.astype(int_dtype)
 
-        case PositionalEncodingEnum.SEQUENCE:
-            gap_encoding = -gap_mask.astype(int_dtype) - seq_offsets
+    elif encoding == PositionalEncodingEnum.SEQUENCE:
+        gap_encoding = -gap_mask.astype(int_dtype) - seq_offsets
 
-        case PositionalEncodingEnum.POSITION:
-            gap_encoding = -(~gap_mask).cumsum(axis=1, dtype=int_dtype) - seq_offsets
+    elif encoding == PositionalEncodingEnum.POSITION:
+        gap_encoding = -(~gap_mask).cumsum(axis=1, dtype=int_dtype) - seq_offsets
 
-        case PositionalEncodingEnum.RAW:
-            code_func = np.vectorize(ord)
-            site_codes = code_func(A)
-            site_codes[A == GAP_CHAR] = GAP_CODE
-            site_codes = site_codes.astype(int_dtype)
-            return site_codes
+    elif encoding == PositionalEncodingEnum.RAW:
+        code_func = np.vectorize(ord)
+        site_codes = code_func(A)
+        site_codes[A == GAP_CHAR] = GAP_CODE
+        site_codes = site_codes.astype(int_dtype)
+        return site_codes
 
-        case PositionalEncodingEnum.GAP_REGIONS:
-            # gap_ends contains True if after a gap there is a normal site (i.e., the ends of gapped regions)
-            gap_ends = np.diff(gap_mask, n=1, axis=1, append=0) == -1
-            # gap_counts contains an incrementing counter for gapped positions in each sequence
-            gap_counts = gap_mask.cumsum(axis=1)
-            # Set all positions to zero that are not the end of a gap region
-            gap_counts[~gap_ends] = 0
-            # For each gap region, the last gap now holds the count of all gaps up to that point
-            # Right-shift the gap end counters (counts[i] = counts_shifted[i+1])
-            gap_end_counts_shifted = np.roll(gap_counts, shift=1, axis=1)
-            # Set the first position to zero (no preceding gap regions)
-            gap_end_counts_shifted[:, 0] = 0
-            # Forward fill the values: now position i holds the cumulative gap count prior to the current gap region
-            gap_end_counts_shifted = _ffill_numpy_2d_axis_1(
-                gap_end_counts_shifted, val=0
-            )
-            # Compute the length of the gap regions at their last position
-            site_codes = gap_counts - gap_end_counts_shifted
-            # Remove all positions that are not gap region ends
-            site_codes[~gap_ends] = 0
-            # Backward fill with gap region end values
-            site_codes = _ffill_numpy_2d_axis_1(site_codes[:, ::-1], val=0)[:, ::-1]
-            # Remove values at non-gap sites
-            site_codes[~gap_mask] = 0
-            # At each gap, A_code now contains the length of the current gap region at every gap position
-            site_codes = site_codes.astype(int_dtype)
-            return site_codes
+    elif encoding == PositionalEncodingEnum.GAP_REGIONS:
+        # gap_ends contains True if after a gap there is a normal site (i.e., the ends of gapped regions)
+        gap_ends = np.diff(gap_mask, n=1, axis=1, append=0) == -1
+        # gap_counts contains an incrementing counter for gapped positions in each sequence
+        gap_counts = gap_mask.cumsum(axis=1)
+        # Set all positions to zero that are not the end of a gap region
+        gap_counts[~gap_ends] = 0
+        # For each gap region, the last gap now holds the count of all gaps up to that point
+        # Right-shift the gap end counters (counts[i] = counts_shifted[i+1])
+        gap_end_counts_shifted = np.roll(gap_counts, shift=1, axis=1)
+        # Set the first position to zero (no preceding gap regions)
+        gap_end_counts_shifted[:, 0] = 0
+        # Forward fill the values: now position i holds the cumulative gap count prior to the current gap region
+        gap_end_counts_shifted = _ffill_numpy_2d_axis_1(gap_end_counts_shifted, val=0)
+        # Compute the length of the gap regions at their last position
+        site_codes = gap_counts - gap_end_counts_shifted
+        # Remove all positions that are not gap region ends
+        site_codes[~gap_ends] = 0
+        # Backward fill with gap region end values
+        site_codes = _ffill_numpy_2d_axis_1(site_codes[:, ::-1], val=0)[:, ::-1]
+        # Remove values at non-gap sites
+        site_codes[~gap_mask] = 0
+        # At each gap, A_code now contains the length of the current gap region at every gap position
+        site_codes = site_codes.astype(int_dtype)
+        return site_codes
 
-        case _:
-            raise ValueError(encoding)
+    else:
+        raise ValueError(encoding)
 
     site_codes = np.where(gap_mask, gap_encoding, site_encoding).astype(int_dtype)
     return site_codes

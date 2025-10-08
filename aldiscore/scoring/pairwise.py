@@ -89,13 +89,12 @@ class _Metric(ABC):
             for bi_ensemble in bi_ensembles:
                 scores.append(self._compute_ensemble(bi_ensemble))
 
-            match self._format:
-                case "scalar":
-                    return np.mean(scores)
-                case "flat":
-                    return np.array(scores)
-                case _:
-                    raise ValueError(f"Unknown strategy '{self._format}'")
+            if self._format == "scalar":
+                return np.mean(scores)
+            elif self._format == "flat":
+                return np.array(scores)
+            else:
+                raise ValueError(f"Unknown strategy '{self._format}'")
 
     def _compute_ensemble(self, ensemble: Ensemble):
         scores = []
