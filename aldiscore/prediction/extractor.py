@@ -611,7 +611,6 @@ class FeatureExtractor(BaseFeatureExtractor):
                     pos_bc = index_map[idx_b][idx_c]
                     mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
                     if np.sum(mask) > 0:
-                        # nums.append(np.sum(pos_ac[mask] == pos_bc[pos_ab[mask]]))
                         group_scores.append(
                             similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
                         )

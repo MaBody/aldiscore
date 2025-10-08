@@ -123,8 +123,8 @@ def main():
         help="\n".join(
             (
                 "Scoring method, defaults to 'd_pos'.",
-                f"Pairwise:  {mode_map["pairwise"]}",
-                f"Set-based: {mode_map["set-based"]}",
+                f"Pairwise:  {mode_map['pairwise']}",
+                f"Set-based: {mode_map['set-based']}",
             )
         ),
     )
@@ -135,8 +135,8 @@ def main():
         help="\n".join(
             (
                 "Output format, defaults to 'scalar'.",
-                f"Pairwise:  {out_type_map["pairwise"]}",
-                f"Set-based: {out_type_map["set-based"]}",
+                f"Pairwise:  {out_type_map['pairwise']}",
+                f"Set-based: {out_type_map['set-based']}",
                 "Defaults to 'scalar'",
             )
         ),
