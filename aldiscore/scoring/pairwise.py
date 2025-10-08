@@ -107,15 +107,14 @@ class _Metric(ABC):
             )
             scores.append(score)
 
-        match self._format:
-            case "scalar":
-                return np.mean(scores)
-            case "flat":
-                return np.array(scores)
-            case "matrix":
-                return utils.format_dist_mat(scores, ensemble)
-            case _:
-                raise ValueError(f"Unknown strategy '{self._format}'")
+        if self._format == "scalar":
+            return np.mean(scores)
+        elif self._format == "flat":
+            return np.array(scores)
+        elif self._format == "matrix":
+            return utils.format_dist_mat(scores, ensemble)
+        else:
+            raise ValueError(f"Unknown strategy '{self._format}'")
 
     def compute_similarity(
         self,
