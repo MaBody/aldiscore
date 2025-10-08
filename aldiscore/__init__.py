@@ -1,6 +1,7 @@
 from pathlib import Path
 import yaml
 import os
+from typing import List
 
 
 ROOT = Path(__file__).parent
@@ -25,7 +26,7 @@ def get_from_config(*keys: str, none_ok: bool = False):
     return val
 
 
-def _get_val_or_none(config: dict, keys: list[str]):
+def _get_val_or_none(config: dict, keys: List[str]):
     out = config
     for key in keys:
         if (out is None) or (not isinstance(out, dict)):

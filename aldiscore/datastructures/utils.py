@@ -12,6 +12,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio.Align import MultipleSeqAlignment
 from aldiscore.enums.enums import DataTypeEnum
 from aldiscore.constants.constants import DNA_CHARS, AA_CHARS, GAP_CHAR
+from typing import List
 
 
 def _compare_ungapped_rows(idx_a, idx_b, records):
@@ -78,7 +79,7 @@ def _compare_ids(idx_a, idx_b, records):
         return 0
 
 
-def argsort_seq_order(records: list[SeqRecord] | MultipleSeqAlignment):
+def argsort_seq_order(records: List[SeqRecord] | MultipleSeqAlignment):
     """
     Return the indices that would sort the records in a stable, canonical order.
 
@@ -105,7 +106,7 @@ def argsort_seq_order(records: list[SeqRecord] | MultipleSeqAlignment):
     )
 
 
-def infer_data_type(records: list[SeqRecord] | MultipleSeqAlignment):
+def infer_data_type(records: List[SeqRecord] | MultipleSeqAlignment):
     """
     Infer the biological data type (DNA or protein) from a collection of sequence records.
 
@@ -154,7 +155,7 @@ def infer_data_type(records: list[SeqRecord] | MultipleSeqAlignment):
         )
 
 
-def get_unique_key(records: list[SeqRecord] | MultipleSeqAlignment):
+def get_unique_key(records: List[SeqRecord] | MultipleSeqAlignment):
     """
     Generate a unique hash key for a collection of sequence records based on their sequence content.
 

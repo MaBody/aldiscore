@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 import itertools
 import math
 from aldiscore.scoring.encoding import _ffill_numpy_2d_axis_1
@@ -67,7 +67,7 @@ def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
     return site_codes
 
 
-def repeat_distributions(seq_arrs: list[np.ndarray]) -> tuple[np.ndarray]:
+def repeat_distributions(seq_arrs: List[np.ndarray]) -> tuple[np.ndarray]:
     """
     Occurrences of homopolymers and their lengths.
     """

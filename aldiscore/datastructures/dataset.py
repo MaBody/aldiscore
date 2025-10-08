@@ -6,6 +6,7 @@ Provides a Dataset class for storing, sorting, and inferring data types of seque
 from Bio.SeqRecord import SeqRecord
 from aldiscore.datastructures import utils
 from aldiscore.enums.enums import DataTypeEnum
+from typing import List
 
 
 class Dataset:
@@ -32,7 +33,7 @@ class Dataset:
 
     def __init__(
         self,
-        records: list[SeqRecord],
+        records: List[SeqRecord],
         data_type: DataTypeEnum = None,
         sort_sequences: bool = True,
     ):

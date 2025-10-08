@@ -11,7 +11,7 @@ using different strategies to summarize the consistency of residue placement.
 """
 
 import numpy as np
-from typing import Literal
+from typing import List, Literal
 from tqdm import tqdm
 from abc import ABC
 from aldiscore.enums.enums import PositionalEncodingEnum
@@ -47,7 +47,7 @@ class _ConfusionScore(ABC):
 
     def compute(
         self, ensemble: Ensemble, reference: Alignment = None
-    ) -> float | np.ndarray | list[np.ndarray]:
+    ) -> float | np.ndarray | List[np.ndarray]:
         """
         Compute the confusion score for an ensemble of alignments.
 
@@ -286,8 +286,8 @@ class ConfusionDisplace(_ConfusionScore):
     def __init__(
         self,
         format: Literal["scalar", "sequence", "residue"] = "scalar",
-        thresholds: list[int] = [0, 1, 2, 4, 8, 16, 32],
-        weights: list[float] = [1, 1, 1, 1, 1, 1, 1],
+        thresholds: List[int] = [0, 1, 2, 4, 8, 16, 32],
+        weights: List[float] = [1, 1, 1, 1, 1, 1, 1],
         verbose: bool = False,
     ):
         super().__init__(format, verbose)

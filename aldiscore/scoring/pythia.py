@@ -6,15 +6,6 @@ from aldiscore import get_from_config
 from aldiscore.datastructures.ensemble import Ensemble
 
 
-# def _parse_pythia_ensemble(ensemble: Ensemble) -> list[MSA]:
-#     msas = []
-#     for alignment in ensemble.alignments:
-#         msas.append[_parse_pythia_msa(alignment)]
-
-
-# def _parse_pythia_msa(alignment: Alignment) -> list[pypythia.msa.MSA]:
-
-
 def compute_pythia_difficulty(
     ensemble: Ensemble, raxmlng_path: Path = None, threads: int = 1
 ):

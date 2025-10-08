@@ -1,7 +1,7 @@
 import pathlib
 import subprocess
 import tempfile
-from typing import Optional
+from typing import List, Optional
 import itertools
 import numpy as np
 from numpy import typing as npt
@@ -13,7 +13,7 @@ from aldiscore.constants.constants import DNA_CHAR_MAP, AA_CHAR_MAP
 
 
 def run_cmd(
-    cmd: list[str],
+    cmd: List[str],
     outfile: pathlib.Path,
     logfile: Optional[pathlib.Path] = None,
     log_write_mode: str = "w",

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Union
 from aldiscore.datastructures.alignment import Alignment
 from aldiscore.datastructures.dataset import Dataset
+from typing import List
 
 
 class Ensemble:
@@ -27,7 +28,7 @@ class Ensemble:
         Type of biological data (e.g., DNA, RNA, protein).
     """
 
-    def __init__(self, alignments: list[Alignment], dataset: Dataset = None):
+    def __init__(self, alignments: List[Alignment], dataset: Dataset = None):
         """
         Initialize an Ensemble instance.
 

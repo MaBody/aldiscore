@@ -2,7 +2,7 @@ from aldiscore.prediction.extractor import FeatureExtractor
 from typing import Literal
 from pathlib import Path
 import os
-from typing import TYPE_CHECKING
+from typing import List, TYPE_CHECKING
 from aldiscore import get_from_config, ROOT
 from aldiscore.constants.constants import GAP_CHAR
 import lightgbm as lgb
@@ -33,7 +33,7 @@ class DifficultyPredictor:
 
     def predict(
         self,
-        sequences: list[SeqRecord | str] | Path,
+        sequences: List[SeqRecord | str] | Path,
         in_format: str = "fasta",
         drop_gaps: bool = True,
     ) -> float:

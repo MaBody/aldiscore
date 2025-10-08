@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import List, Literal, Optional, TYPE_CHECKING
 from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
@@ -40,7 +40,7 @@ class BaseFeatureExtractor(ABC):
 
     def __init__(
         self,
-        sequences: list[SeqRecord],
+        sequences: List[SeqRecord],
         track_perf: bool = False,
     ):
 
@@ -132,7 +132,7 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     def __init__(
         self,
-        sequences: list[SeqRecord],
+        sequences: List[SeqRecord],
         psa_config: dict = None,
         track_perf: bool = False,
         validate: Literal["warn", "error"] = "error",
