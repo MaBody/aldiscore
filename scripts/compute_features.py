@@ -38,7 +38,7 @@ def process_queue(queue: mp.Queue):
     counter = 0
     perf_dicts = {}
     log_file = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".parquet"
-    log_path = ROOT / "logs" / "perf" / log_file
+    log_path = ROOT.parent / "logs" / "perf" / log_file
     while True:
         msg = queue.get()  # Read from the queue
         done = msg == _DONE

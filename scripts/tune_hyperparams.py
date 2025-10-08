@@ -42,7 +42,7 @@ def objective(trial: optuna.Trial, params: dict, X, y):
 
 if __name__ == "__main__":
     data_dir = Path("/hits/fast/cme/bodynems/data/paper")
-    save_dir = ROOT / "optuna"
+    save_dir = ROOT.parent / "optuna"
     os.makedirs(save_dir, exist_ok=True)
 
     feat_df, drop_df, label_df = utils.load_features(
