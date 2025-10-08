@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Literal, Optional
+from typing import List, Tuple, Optional
 import itertools
 import math
 from aldiscore.scoring.encoding import _ffill_numpy_2d_axis_1
@@ -67,7 +67,7 @@ def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
     return site_codes
 
 
-def repeat_distributions(seq_arrs: List[np.ndarray]) -> tuple[np.ndarray]:
+def repeat_distributions(seq_arrs: List[np.ndarray]) -> Tuple[np.ndarray]:
     """
     Occurrences of homopolymers and their lengths.
     """
@@ -114,7 +114,7 @@ def load_features(
     exclude_features: list = None,
     include_features: list = None,
     drop_na: bool = True,
-) -> tuple[pd.DataFrame]:
+) -> Tuple[pd.DataFrame]:
     assert_msg = "Specify either 'exclude_{0}' or 'include_{0}'"
     assert not (exclude_sources and include_sources), assert_msg.format("sources")
     assert not (exclude_features and include_features), assert_msg.format("features")

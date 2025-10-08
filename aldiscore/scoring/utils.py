@@ -1,7 +1,7 @@
 import pathlib
 import subprocess
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Dict
 import itertools
 import numpy as np
 from numpy import typing as npt
@@ -218,7 +218,7 @@ def format_dist_mat(dists: list, ensemble: Ensemble):
 
 
 def compute_custom_metrics(
-    idxs: tuple, ensemble: Ensemble = None, metrics: dict[str] = None
+    idxs: tuple, ensemble: Ensemble = None, metrics: Dict[str] = None
 ):
     idx_x, idx_y = idxs
     dist_dict = {}

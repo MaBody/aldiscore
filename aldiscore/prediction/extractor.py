@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import List, Literal, Union
+from typing import List, Literal, Union, Tuple, Dict
 from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
@@ -170,7 +170,7 @@ class FeatureExtractor(BaseFeatureExtractor):
             else:
                 print(msg)
 
-    def _init_psa_config(self) -> dict[str, dict]:
+    def _init_psa_config(self) -> Dict[str, dict]:
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
@@ -184,7 +184,7 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     # @_feature
     # # _init_cache needs to be called as a feature to support performance logs
-    # def _init_cache(self) -> dict[str, str]:
+    # def _init_cache(self) ->Dict[str, str]:
     #     self._cache[self._SEQ_ORD] = [
     #         list(map(ord, str(seq_record.seq).upper()))
     #         for seq_record in self._sequences
@@ -240,35 +240,35 @@ class FeatureExtractor(BaseFeatureExtractor):
     # ------------------------------------------
 
     @_feature
-    def _data_type(self) -> dict[str, bool]:
+    def _data_type(self) -> Dict[str, bool]:
         name = "is_dna"
         feat = self._cache[self._DTYPE].upper() == "DNA"
         feat_dict = {name: feat}
         return feat_dict
 
     @_feature
-    def _num_sequences(self) -> dict[str, int]:
+    def _num_sequences(self) -> Dict[str, int]:
         name = "num_seqs"
         feat = len(self._sequences)
         feat_dict = {name: feat}
         return feat_dict
 
     # @_feature
-    # def _num_unique_sequences(self) -> dict[str, float]:
+    # def _num_unique_sequences(self) ->Dict[str, float]:
     #     name = "n_unique_sequences"
     #     feat = len(set(seq.seq for seq in self._dataset.sequences))
     #     feat_dict = {name: feat}
     #     return feat_dict
 
     @_feature
-    def _sequence_length(self) -> dict[str, float]:
+    def _sequence_length(self) -> Dict[str, float]:
         name = "seq_length"
         feat = self._get_cached(self._SEQ_LEN)
         feat_dict = self.descriptive_statistics(feat, name)
         return feat_dict
 
     @_feature
-    def _sequence_length_ratio(self) -> dict[str, float]:
+    def _sequence_length_ratio(self) -> Dict[str, float]:
         name = "seq_length_ratio"
         seq_lengths = self._get_cached(self._SEQ_LEN)
         feat = min(seq_lengths) / max(seq_lengths)
@@ -276,7 +276,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _lower_bound_gap_percentage(self) -> dict[str, float]:
+    def _lower_bound_gap_percentage(self) -> Dict[str, float]:
         name = "lbgp"
         seq_lengths = self._get_cached(self._SEQ_LEN)
         feat = 1 - np.mean(seq_lengths) / max(seq_lengths)
@@ -284,7 +284,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     # @_feature
-    # def _sequence_length_taxa_ratio(self) -> dict[str, float]:
+    # def _sequence_length_taxa_ratio(self) ->Dict[str, float]:
     #     name = "seq_length_taxa_ratio"
     #     seq_lengths = [len(seq) for seq in self._sequences]
     #     feat = seq_lengths / len(self._sequences)
@@ -293,7 +293,7 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     # TODO: Included in FRST randomness features!
     @_feature
-    def _sequence_entropy(self) -> dict[str, float]:
+    def _sequence_entropy(self) -> Dict[str, float]:
         """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
         eps = 1e-8
         name = "char_ent"
@@ -304,7 +304,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     # @_feature
-    # def _sequence_cross_entropy(self) -> dict[str, float]:
+    # def _sequence_cross_entropy(self) ->Dict[str, float]:
     #     """Computes the {min, max, mean ...} pairwise Cross-Entropy."""
     #     eps = 1e-8
     #     name = "cross_entropy"
@@ -319,7 +319,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     @_feature
-    def _char_js_divergence(self) -> dict[str, float]:
+    def _char_js_divergence(self) -> Dict[str, float]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
         name = "char_js"
@@ -331,7 +331,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _homopolymer_js_divergence(self) -> dict[str, float]:
+    def _homopolymer_js_divergence(self) -> Dict[str, float]:
         """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
         eps = 1e-8
         name = "hpoly_js"
@@ -347,7 +347,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     # @_feature
-    # def _ent_randomness(self) -> dict[str, float]:
+    # def _ent_randomness(self) ->Dict[str, float]:
     #     name = "frst"
     #     ent_path = get_from_config("tools", "ent")
     #     feats = defaultdict(list)
@@ -379,7 +379,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     @_feature
-    def _transitive_consistency(self) -> dict[str, float]:
+    def _transitive_consistency(self) -> Dict[str, float]:
         """Computes measures of transitive consistency on the PSA groups."""
         name = "psa_tc"
         similarity_func = lambda x, y: np.sum(x == y) / len(x)
@@ -391,7 +391,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     # @_feature
-    # def _transitive_consistency_dist_scaled(self) -> dict[str, float]:
+    # def _transitive_consistency_dist_scaled(self) ->Dict[str, float]:
     #     """Computes measures of transitive consistency on the PSA groups."""
     #     name = "tc_dist_scaled"
     #     similarity_func = lambda x, y: np.linalg.norm(x - y)
@@ -404,7 +404,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     #     return feat_dict
 
     @_feature
-    def _psa_basic_features(self) -> dict[str, float]:
+    def _psa_basic_features(self) -> Dict[str, float]:
         """Computes a bunch of features based on pairwise alignments of the unaligned sequences."""
         score_dict = defaultdict(list)
         al_scores = self._get_cached(self._PSA_SCORES)
@@ -425,7 +425,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _psa_gap_length(self) -> dict[str, float]:
+    def _psa_gap_length(self) -> Dict[str, float]:
         """Computes features based on gap lengths."""
         name = "psa_gap_len"
         score_dict = defaultdict(list)
@@ -435,7 +435,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         for idx_pair in al_scores:
             if idx_pair not in idx_cache:
                 idx_cache.add(idx_pair)
-                gap_len_arr = self._gap_lengths(idx_pair, name)
+                gap_len_arr = self._gap_lengths(idx_pair)
                 gap_ends = gap_len_arr > 0
                 has_gaps = gap_ends.any(axis=1)
                 gap_lens = gap_len_arr[gap_ends] if has_gaps.any() else np.array([0])
@@ -449,7 +449,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         return feat_dict
 
     @_feature
-    def _kmer_similarity(self) -> dict[str, float]:
+    def _kmer_similarity(self) -> Dict[str, float]:
         name = "-mer"
         Ks = [4, 7, 10, 13]
         eps = 1e-8
@@ -627,13 +627,13 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         return score_dict
 
-    def _alignment_score_ratio(self, idx_pair: tuple[int]) -> float:
+    def _alignment_score_ratio(self, idx_pair: Tuple[int]) -> float:
         """Score ratio = Alignment score scaled by the minimum sequence length"""
         score = self._cache[self._PSA_SCORES][idx_pair]
         min_len = self._cache[self._SEQ_LEN][list(idx_pair)].min()
         return score / min_len
 
-    def _alignment_gap_ratio(self, idx_pair: tuple[int]) -> float:
+    def _alignment_gap_ratio(self, idx_pair: Tuple[int]) -> float:
         """Gap ratio = number of gaps divided by the total number of characters in the pairwise alignment"""
         al_a = self._cache[self._PSA][idx_pair[1]][idx_pair[0]]
         al_b = self._cache[self._PSA][idx_pair[0]][idx_pair[1]]
@@ -641,12 +641,12 @@ class FeatureExtractor(BaseFeatureExtractor):
         num_gaps = np.sum(al_a == gap_ord) + np.sum(al_b == gap_ord)
         return num_gaps / (2 * len(al_a))
 
-    def _alignment_stretch_ratio(self, idx_pair: tuple[int]) -> float:
+    def _alignment_stretch_ratio(self, idx_pair: Tuple[int]) -> float:
         """Stretch ratio = Increase in length of the longest unaligned sequence compared to the pairwise alignment"""
         max_len = self._cache[self._SEQ_LEN][list(idx_pair)].max()
         return max_len / len(self._cache[self._PSA][idx_pair[1]][idx_pair[0]])
 
-    def _gap_lengths(self, idx_pair: tuple[int], name: str) -> np.ndarray:
+    def _gap_lengths(self, idx_pair: Tuple[int]) -> np.ndarray:
         """Returns gap length at end of every gap region (else 0)."""
         gap_ord = self._cache[self._INT_TYPE](ord(GAP_CHAR))
         al = np.stack(
