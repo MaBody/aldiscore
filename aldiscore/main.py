@@ -6,47 +6,16 @@ import shutil
 from aldiscore.enums.enums import MethodEnum as ME
 import sys
 
-# from Bio.AlignIO import read
-
-# from aldiscore.scoring import pairwise
-# from aldiscore.scoring import set_based
-# from aldiscore.datastructures.ensemble import Ensemble
-# from aldiscore.datastructures.alignment import Alignment
-
-# CLI structure: aldiscore (base command), then sub-command, then options
-# Pairwise mode (input: folder with alternative MSAs in FASTA format)
-# aldiscore heuristic <input_dir> [--method={d_ssp, d_seq, d_pos, d_phash}] [--format={scalar, flat, matrix}]
-# default: aldiscore heuristic <input_dir> --method=d_pos --format=scalar
-
-# Set-based mode (input: folder with alternative MSAs in FASTA format)
-# aldiscore heuristic <input_dir> [--method={conf_set, conf_entropy, conf_displace}] [--format={scalar, sequence, residue}]
-# default: aldiscore heuristic <input_dir> --method=conf_entropy --format=scalar
-
-# Prediction mode (input: unaligned FASTA file)
-# aldiscore predict <input_file> [--model={latest, vX.Y}] [--seed={1,2,3...}]
-# default: aldiscore predict <input_file> --model=latest --seed=42
-
 console = Console()
 
 heuristic_modes = ["pairwise", "set-based"]
-mode_map = dict(
-    zip(
-        heuristic_modes,
-        [
-            [ME.D_SSP, ME.D_SEQ, ME.D_POS, ME.D_PHASH],
-            [ME.CONF_SET, ME.CONF_ENTROPY, ME.CONF_DISPLACE],
-        ],
-    )
-)
-out_type_map = dict(
-    zip(
-        heuristic_modes,
-        [
-            ["scalar", "flat", "matrix"],
-            ["scalar", "sequence", "residue"],
-        ],
-    )
-)
+mode_map = {}
+mode_map["pairwise"] = list(map(str, [ME.D_SSP, ME.D_SEQ, ME.D_POS]))
+mode_map["set-based"] = list(map(str, [ME.CONF_SET, ME.CONF_ENTROPY, ME.CONF_DISPLACE]))
+
+out_type_map = {}
+out_type_map["pairwise"] = ["scalar", "flat", "matrix"]
+out_type_map["set-based"] = ["scalar", "sequence", "residue"]
 
 
 def handle_heuristic_mode(in_dir, in_format, method, out_type):
@@ -81,8 +50,6 @@ def handle_heuristic_mode(in_dir, in_format, method, out_type):
             return pairwise.SSPDistance(out_type).compute(ensemble)
         elif method == ME.D_SEQ:
             return pairwise.DSeqDistance(out_type).compute(ensemble)
-        elif method == ME.D_PHASH:
-            return pairwise.PHashDistance(out_type).compute(ensemble)
 
     if mode == "set-based":
 
@@ -139,12 +106,12 @@ def main():
         formatter_class=get_formatter_cls(RawTextRichHelpFormatter),
     )
     heuristic_parser.add_argument(
-        "in_dir",
+        "in-dir",
         type=pathlib.Path,
         help="Path to input directory containing multiple MSA files on the same sequences.",
     )
     heuristic_parser.add_argument(
-        "--in_format",
+        "--in-format",
         type=str,
         default="fasta",
         help="File format, defaults to 'fasta'.",
@@ -153,21 +120,23 @@ def main():
         "--method",
         type=str,
         default="d_pos",
-        help=(
-            "Scoring method, defaults to 'd_pos'.\n"
-            "Pairwise:  {d_ssp, d_seq, d_pos, d_phash}\n"
-            "Set-based: {conf_set, conf_entropy, conf_displace}"
+        help="\n".join(
+            (
+                "Scoring method, defaults to 'd_pos'.",
+                f"Pairwise:  {mode_map["pairwise"]}",
+                f"Set-based: {mode_map["set-based"]}",
+            )
         ),
     )
     heuristic_parser.add_argument(
-        "--out_type",
+        "--out-type",
         type=str,
         default="scalar",
         help="\n".join(
             (
                 "Output format, defaults to 'scalar'.",
-                "Pairwise:  {scalar, flat, matrix}",
-                "Set-based: {scalar, sequence, residue}",
+                f"Pairwise:  {out_type_map["pairwise"]}",
+                f"Set-based: {out_type_map["set-based"]}",
                 "Defaults to 'scalar'",
             )
         ),
@@ -180,21 +149,21 @@ def main():
         formatter_class=get_formatter_cls(RichHelpFormatter),
     )
     predict_parser.add_argument(
-        "in_path",
+        "in-path",
         type=pathlib.Path,
         help="Path to file containing multiple (unaligned) sequences.",
     )
     predict_parser.add_argument(
-        "--in_format",
+        "--in-format",
         type=str,
         default="fasta",
         help="Defaults to 'fasta'. File format of the input sequences. Must be supported by BioPython.",
     )
     predict_parser.add_argument(
-        "--drop_gaps",
-        type=bool,
-        default=True,
-        help="Defaults to True. If True, gaps in the input sequences are removed (only necessary for aligned input data).",
+        "--drop-gaps",
+        action="store_true",
+        dest="drop_gaps",
+        help="If set, gaps in the input sequences are dropped (use for aligned input data).",
     )
     predict_parser.add_argument(
         "--model",
@@ -205,23 +174,22 @@ def main():
     predict_parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help=" Defaults to 42. Seed used for sampling in randomized features.",
+        default=0,
+        help=" Defaults to 0. Seed used for sampling in randomized features.",
     )
     args = parser.parse_args()
-
     out = None
     try:
         if args.command == "heuristic":
             out = handle_heuristic_mode(
-                in_dir=args.in_dir,
+                in_dir=getattr(args, "in-dir"),
                 in_format=args.in_format,
                 method=args.method,
                 out_type=args.out_type,
             )
         elif args.command == "predict":
             out = handle_predict_mode(
-                in_path=args.in_path,
+                in_path=getattr(args, "in-path"),
                 in_format=args.in_format,
                 drop_gaps=args.drop_gaps,
                 model=args.model,
