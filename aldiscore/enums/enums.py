@@ -77,6 +77,6 @@ class MethodEnum(StringEnum):
     D_SEQ = ("d_seq", r"$d_{seq}$")
     D_POS = ("d_pos", r"$d_{pos}$")
 
-    CONF_SET = ("ConfSet", r"$\text{Conf}_{Set}$")
-    CONF_ENTROPY = ("ConfEntropy", r"$\text{Conf}_{Entropy}$")
-    CONF_DISPLACE = ("ConfDisplace", r"$\text{Conf}_{Displace}$")
+    CONF_SET = ("conf_set", r"$\text{Conf}_{Set}$")
+    CONF_ENTROPY = ("conf_entropy", r"$\text{Conf}_{Entropy}$")
+    CONF_DISPLACE = ("conf_displace", r"$\text{Conf}_{Displace}$")

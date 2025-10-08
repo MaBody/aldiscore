@@ -1,3 +1,3 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
-setup(name="aldiscore", packages=find_packages())
+setup()

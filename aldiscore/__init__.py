@@ -3,8 +3,7 @@ import yaml
 import os
 
 
-ROOT = Path(__file__).parent.parent
-
+ROOT = Path(__file__).parent
 RSTATE = 0
 
 
