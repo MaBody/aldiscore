@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from collections import Counter
-from typing import List, Literal, Union, Tuple, Dict
+from typing import List, Literal, Union, Tuple, Dict, Any
 from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
@@ -170,7 +170,7 @@ class FeatureExtractor(BaseFeatureExtractor):
             else:
                 print(msg)
 
-    def _init_psa_config(self) -> Dict[str, dict]:
+    def _init_psa_config(self) -> Dict[str, Any]:
         config = {}
         config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
         config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}

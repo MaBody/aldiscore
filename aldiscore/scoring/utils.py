@@ -217,21 +217,6 @@ def format_dist_mat(dists: list, ensemble: Ensemble):
     return dist_mat
 
 
-def compute_custom_metrics(
-    idxs: tuple, ensemble: Ensemble = None, metrics: Dict[str] = None
-):
-    idx_x, idx_y = idxs
-    dist_dict = {}
-    for name, metric in metrics.items():
-        dist = metric.compute(
-            ensemble.alignments[idx_x],
-            ensemble.alignments[idx_y],
-        )
-        # print(f"{name} : {time()- start}s")
-        dist_dict[name] = dist
-    return dist_dict
-
-
 def get_bi_ensembles(ensemble: Ensemble, reference: Alignment):
     bi_ensembles = [Ensemble([inferred, reference]) for inferred in ensemble.alignments]
     return bi_ensembles
