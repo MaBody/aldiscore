@@ -339,7 +339,7 @@ class SSPDistance(_HomologySetMetric):
     Computes the SSP (symmetrized sum-of-pairs) distance between two alignments.
     """
 
-    enum = FE.D_SSP
+    enum = ME.D_SSP
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
@@ -367,7 +367,7 @@ class DSeqDistance(_HomologySetMetric):
     Computes the "D_seq" distance between two alignments.
     """
 
-    enum = FE.D_SEQ
+    enum = ME.D_SEQ
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
@@ -395,7 +395,7 @@ class DPosDistance(_HomologySetMetric):
     Computes the "D_pos" distance between two alignments.
     """
 
-    enum = FE.D_POS
+    enum = ME.D_POS
     name = str(enum)
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):
@@ -432,7 +432,7 @@ class PHashDistance(_Metric):
         Size of the hash in bits.
     """
 
-    enum = FE.D_PHASH
+    enum = ME.D_PHASH
     name = None
 
     def __init__(
