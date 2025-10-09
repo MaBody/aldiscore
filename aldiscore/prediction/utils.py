@@ -236,7 +236,7 @@ def optuna_search(X, y, n_trials: int = 100, n_estimators: int = 500, n_jobs: in
                 "num_leaves": trial.suggest_int("num_leaves", 20, 45),
                 "reg_alpha": trial.suggest_float("reg_alpha", 0.00001, 0.1, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 0.00001, 0.1, log=True),
-                "early_stopping_round": 20,
+                "early_stopping_round": 50,
             }
         )
 
@@ -284,4 +284,4 @@ def optuna_search(X, y, n_trials: int = 100, n_estimators: int = 500, n_jobs: in
 
     study.optimize(objective_func, n_trials=n_trials, n_jobs=n_jobs)
 
-    return lgb.LGBMRegressor(**study.best_params())
+    return lgb.LGBMRegressor(**study.best_params)
