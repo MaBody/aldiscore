@@ -207,3 +207,81 @@ def compute_metrics(model, X, y, eps):
 
     perf_df = pd.DataFrame(perf_dicts)
     return perf_df
+
+
+def optuna_search(X, y, n_trials: int = 100, n_estimators: int = 500, n_jobs: int = 1):
+    import optuna
+    import lightgbm as lgb
+    from sklearn.model_selection import KFold
+    from sklearn.metrics import make_scorer
+
+    def rmse(model, X, y):
+        y_pred = model.predict(X)
+        return ((y_pred - y) ** 2).mean() ** 0.5
+
+    def objective(trial: optuna.Trial, params: dict, X, y):
+        temp = params.copy()
+        temp.update(
+            {
+                "bagging_fraction": trial.suggest_float("bagging_fraction", 0.2, 1),
+                "learning_rate": trial.suggest_float(
+                    "learning_rate", 5e-3, 5e-2, log=True
+                ),
+                "subsample": trial.suggest_float("subsample", 0.6, 0.8),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.01, 0.2),
+                "feature_fraction_bynode": trial.suggest_float(
+                    "feature_fraction_bynode", 0.05, 1
+                ),
+                "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 5, 31),
+                "num_leaves": trial.suggest_int("num_leaves", 20, 45),
+                "reg_alpha": trial.suggest_float("reg_alpha", 0.00001, 0.1, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 0.00001, 0.1, log=True),
+                "early_stopping_round": 20,
+            }
+        )
+
+        scores = []
+        # Outer split for test set
+        outer_kf = KFold(n_splits=10, shuffle=True, random_state=0)
+        for train_val_idx, test_idx in outer_kf.split(X, y):
+            X_train_val, X_test = X.iloc[train_val_idx], X.iloc[test_idx]
+            y_train_val, y_test = y.iloc[train_val_idx], y.iloc[test_idx]
+
+            # Inner split for validation set
+            inner_kf = KFold(n_splits=2, shuffle=True, random_state=0)
+            for train_idx, val_idx in inner_kf.split(X_train_val, y_train_val):
+                X_train, X_val = X_train_val.iloc[train_idx], X_train_val.iloc[val_idx]
+                y_train, y_val = y_train_val.iloc[train_idx], y_train_val.iloc[val_idx]
+                # Train with early stopping on X_val, report test on X_test
+
+                model = lgb.LGBMRegressor(**temp)
+                model.fit(
+                    X_train,
+                    y_train,
+                    eval_set=[(X_val, y_val)],
+                    eval_metric="rmse",
+                )
+            y_pred = model.predict(X_test)
+            fold_rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
+            scores.append(fold_rmse)
+        return np.median(scores)
+
+    params = {
+        "n_jobs": 1,
+        "objective": "regression",
+        "metric": "rmse",
+        "n_estimators": n_estimators,
+        "verbosity": -1,
+    }
+
+    rmse_scorer = make_scorer(rmse)
+
+    study = optuna.create_study(
+        direction="minimize",
+        pruner=optuna.pruners.MedianPruner(),
+    )
+    objective_func = partial(objective, params=params, X=X, y=y)
+
+    study.optimize(objective_func, n_trials=n_trials, n_jobs=n_jobs)
+
+    return lgb.LGBMRegressor(**study.best_params())
