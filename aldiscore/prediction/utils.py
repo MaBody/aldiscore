@@ -187,60 +187,63 @@ def train_test_valid_split(index: pd.Index):
     return train_idxs, valid_idxs, test_idxs
 
 
-def compute_metrics(model, X, y, eps):
+def compute_metrics(model, X, y):
+    from sklearn.metrics import r2_score
+
     y_pred = model.predict(X)
     perf_dicts = []
     rmse = (((y_pred - y) ** 2).sum() / len(y)) ** 0.5
-    rmse_cv = rmse / np.mean(y)
     mae = (np.abs(y_pred - y)).sum() / len(y)
-    mape = (np.abs(y_pred - y) / (y + eps)).sum() / len(y)
-    mape_p50 = np.percentile(np.abs(y_pred - y) / (y + eps), 50)
     corr = np.corrcoef(y, y_pred)[0, 1]
     perf_dict = {}
-    perf_dict[f"RMSE"] = f"{rmse:.4f}"
-    perf_dict[f"RMSE_CV"] = f"{rmse_cv:.4f}"
-    perf_dict[f"MAE"] = f"{mae:.4f}"
-    perf_dict[f"MAPE"] = f"{mape:.4f}"
-    perf_dict[f"MAPE_P50"] = f"{mape_p50:.4f}"
-    perf_dict[f"CORR"] = f"{corr:.4f}"
+    perf_dict["RMSE"] = f"{rmse:.4f}"
+    perf_dict["MAE"] = f"{mae:.4f}"
+    perf_dict["R^2"] = f"{r2_score(y, y_pred):.4f}"
+    perf_dict["CORR"] = f"{corr:.4f}"
     perf_dicts.append(perf_dict)
 
     perf_df = pd.DataFrame(perf_dicts)
     return perf_df
 
 
-def optuna_search(X, y, n_trials: int = 100, n_estimators: int = 500, n_jobs: int = 1):
+def optuna_search(
+    X,
+    y,
+    early_stopping: int = 25,
+    n_trials: int = 100,
+    n_estimators: int = 500,
+    n_jobs: int = 1,
+):
+
     import optuna
     import lightgbm as lgb
     from sklearn.model_selection import KFold
-    from sklearn.metrics import make_scorer
 
-    def rmse(model, X, y):
-        y_pred = model.predict(X)
-        return ((y_pred - y) ** 2).mean() ** 0.5
+    optuna.logging.set_verbosity(optuna.logging.ERROR)
 
     def objective(trial: optuna.Trial, params: dict, X, y):
         temp = params.copy()
         temp.update(
             {
-                "bagging_fraction": trial.suggest_float("bagging_fraction", 0.2, 1),
+                "subsample": trial.suggest_float("subsample", 0.2, 1),
                 "learning_rate": trial.suggest_float(
                     "learning_rate", 5e-3, 5e-2, log=True
                 ),
-                "subsample": trial.suggest_float("subsample", 0.6, 0.8),
-                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.01, 0.2),
-                "feature_fraction_bynode": trial.suggest_float(
-                    "feature_fraction_bynode", 0.05, 1
+                "colsample_bytree": trial.suggest_float(
+                    "colsample_bytree", 0.01, 0.5, log=True
                 ),
-                "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 5, 31),
+                "feature_fraction_bynode": trial.suggest_float(
+                    "feature_fraction_bynode", 0.05, 1, log=True
+                ),
+                "min_child_samples": trial.suggest_int("min_child_samples", 5, 35),
                 "num_leaves": trial.suggest_int("num_leaves", 20, 45),
                 "reg_alpha": trial.suggest_float("reg_alpha", 0.00001, 0.1, log=True),
                 "reg_lambda": trial.suggest_float("reg_lambda", 0.00001, 0.1, log=True),
-                "early_stopping_round": 50,
             }
         )
 
         scores = []
+        n_rounds = []
         # Outer split for test set
         outer_kf = KFold(n_splits=10, shuffle=True, random_state=0)
         for train_val_idx, test_idx in outer_kf.split(X, y):
@@ -260,21 +263,28 @@ def optuna_search(X, y, n_trials: int = 100, n_estimators: int = 500, n_jobs: in
                     y_train,
                     eval_set=[(X_val, y_val)],
                     eval_metric="rmse",
+                    callbacks=[
+                        lgb.early_stopping(
+                            stopping_rounds=early_stopping,
+                            verbose=False,
+                        )
+                    ],
                 )
-            y_pred = model.predict(X_test)
-            fold_rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
-            scores.append(fold_rmse)
+                y_pred = model.predict(X_test)
+                fold_rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
+                scores.append(fold_rmse)
+                n_rounds.append(model.best_iteration_)
+            trial.set_user_attr("best_iteration", model.best_iteration_)
         return np.median(scores)
 
     params = {
-        "n_jobs": 1,
         "objective": "regression",
         "metric": "rmse",
         "n_estimators": n_estimators,
+        "n_jobs": 1,
         "verbosity": -1,
+        "importance_type": "gain",
     }
-
-    rmse_scorer = make_scorer(rmse)
 
     study = optuna.create_study(
         direction="minimize",
@@ -282,6 +292,10 @@ def optuna_search(X, y, n_trials: int = 100, n_estimators: int = 500, n_jobs: in
     )
     objective_func = partial(objective, params=params, X=X, y=y)
 
-    study.optimize(objective_func, n_trials=n_trials, n_jobs=n_jobs)
+    study.optimize(
+        objective_func, n_trials=n_trials, n_jobs=n_jobs, show_progress_bar=True
+    )
+    params.update(study.best_params)
+    params["n_estimators"] = study.best_trial.user_attrs["best_iteration"]
 
-    return lgb.LGBMRegressor(**study.best_params)
+    return lgb.LGBMRegressor(**params)
