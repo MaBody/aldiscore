@@ -33,7 +33,7 @@ for train_idx, test_idx in rkf.split(feat_df, label_df.iloc[:, 0]):
         y_train,
         early_stopping=25,
         n_trials=150,
-        n_estimators=1500,
+        n_estimators=2000,
         n_jobs=-1,
     )
     # train model
