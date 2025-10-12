@@ -9,7 +9,7 @@ from aldiscore.prediction.predictor import DifficultyPredictor
 data_dir = Path("/hits/fast/cme/bodynems/data/paper")
 feat_df, drop_df, label_df = utils.load_features(
     data_dir,
-    exclude_features=["is_dna", "num_seqs", "seq_length"],
+    exclude_features=["is_dna", "num_seqs", "seq_length", "10-mer_js", "13-mer_js"],
 )
 
 print(feat_df.shape)
@@ -25,7 +25,7 @@ model = utils.optuna_search(
     y,
     early_stopping=25,
     n_trials=1000,
-    n_estimators=2000,
+    n_estimators=1500,
     n_jobs=-1,
 )
 # train model
@@ -33,4 +33,4 @@ model.fit(X, y)
 
 # save model
 predictor = DifficultyPredictor(model.booster_)
-predictor.save("v1.0.txt")
+predictor.save("v1.1.txt")

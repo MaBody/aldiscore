@@ -9,7 +9,7 @@ from aldiscore import ROOT, RSTATE
 data_dir = Path("/hits/fast/cme/bodynems/data/paper")
 feat_df, drop_df, label_df = utils.load_features(
     data_dir,
-    exclude_features=["is_dna", "num_seqs", "seq_length"],
+    exclude_features=["is_dna", "num_seqs", "seq_length", "10-mer_js", "13-mer_js"],
 )
 
 print(feat_df.shape)
@@ -33,7 +33,7 @@ for train_idx, test_idx in rkf.split(feat_df, label_df.iloc[:, 0]):
         y_train,
         early_stopping=25,
         n_trials=150,
-        n_estimators=2000,
+        n_estimators=1500,
         n_jobs=-1,
     )
     # train model
