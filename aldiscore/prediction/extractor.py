@@ -455,19 +455,21 @@ class FeatureExtractor(BaseFeatureExtractor):
                     continue
                 for kmer in (tuple(seq[i : i + k]) for i in range(n - k + 1)):
                     count_table[hash(kmer)][i] += 1
-
             dist = np.stack(list(count_table.values()), axis=1)
             # If n < k (very short sequences), filter out
             dist = dist[dist.sum(axis=1) != 0]
             # Re-normalized in utils.js_divergence and utils.shannon_entropy
-            dist = (dist / dist.sum(axis=1, keepdims=True)).clip(eps)
-            js = utils.js_divergence(dist, axis=1)
-            feat_dict.update(self.descriptive_statistics(js, str(k) + name + "_js"))
-
+            dist = np.divide(
+                dist, dist.sum(axis=1, keepdims=True), dtype=np.float32
+            ).clip(eps)
             entros = utils.shannon_entropy(dist, axis=1)
             feat_dict.update(
                 self.descriptive_statistics(entros, str(k) + name + "_ent")
             )
+            if k < 10:
+                # JS divergence is too expensive for k >= 10 on large datasets
+                js = utils.js_divergence(dist, axis=1)
+                feat_dict.update(self.descriptive_statistics(js, str(k) + name + "_js"))
 
         return feat_dict
 
@@ -510,7 +512,9 @@ class FeatureExtractor(BaseFeatureExtractor):
             # Normalize to get probabilities
             seq_len = len(seq)
             if seq_len > 0:
-                distributions[i] /= seq_len
+                distributions[i] = np.divide(
+                    distributions[i], seq_len, dtype=np.float32
+                )
 
         return distributions
 

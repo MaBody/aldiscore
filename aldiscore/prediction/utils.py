@@ -85,8 +85,10 @@ def repeat_distributions(seq_arrs: List[np.ndarray]) -> Tuple[np.ndarray]:
 
     count_arr = np.stack(list(count_table.values()), axis=1)
     len_arr = np.stack(list(len_table.values()), axis=1)
-    count_arr = count_arr / count_arr.sum(axis=1, keepdims=True)
-    len_arr = len_arr / len_arr.sum(axis=1, keepdims=True)
+    count_arr = np.divide(
+        count_arr, count_arr.sum(axis=1, keepdims=True), dtype=np.float32
+    )
+    len_arr = np.divide(len_arr, len_arr.sum(axis=1, keepdims=True), dtype=np.float32)
     return count_arr, len_arr
 
 
@@ -106,13 +108,16 @@ def shannon_entropy(probs: np.ndarray, axis: int = None):
 #     return js
 
 
-def js_divergence(dist, axis=1, chunk_size=1000):
-    idxs = np.array(list(itertools.combinations(np.arange(len(dist)), r=2)))
-    n = idxs.shape[0]
+def js_divergence(dist: np.ndarray, axis=1, chunk_size=5e7):
+
+    idxs = np.array(list(itertools.combinations(range(len(dist)), r=2)))
+    n_pairs = idxs.shape[0]
+    n_bins = dist.shape[1]
     results = []
+    step_size = max(1, int(chunk_size // n_bins))
     # Process in chunks
-    for start in range(0, n, chunk_size):
-        end = min(start + chunk_size, n)
+    for start in range(0, n_pairs, step_size):
+        end = min(start + step_size, n_pairs)
         p = dist[idxs[start:end, 0]]
         q = dist[idxs[start:end, 1]]
         p = p / np.sum(p, axis=axis, keepdims=True)
@@ -306,10 +311,7 @@ def optuna_search(
         "importance_type": "gain",
     }
 
-    study = optuna.create_study(
-        direction="minimize",
-        pruner=optuna.pruners.MedianPruner(),
-    )
+    study = optuna.create_study(direction="minimize")
     objective_func = partial(objective, params=params, X=X, y=y)
 
     study.optimize(
