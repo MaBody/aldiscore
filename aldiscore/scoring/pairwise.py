@@ -38,7 +38,7 @@ class _Metric(ABC):
 
     def __init__(
         self,
-        format: Literal["scalar", "flat", "matrix"] = "scalar",
+        out_format: Literal["scalar", "flat", "matrix"] = "scalar",
         cache: dict = None,
     ):
         """
@@ -46,14 +46,14 @@ class _Metric(ABC):
 
         Parameters
         ----------
-        format : {"scalar", "flat", "matrix"}, default="scalar"
+        out_format : {"scalar", "flat", "matrix"}, default="scalar"
             Output format: scalar, flat list, or square matrix.
         cache : dict, optional
             Dictionary for caching intermediate results.
             Caching is applied by default. The parameter allows for re-using an existing cache.
         """
         super().__init__()
-        self._format = format
+        self._format = out_format
         self._cache = {} if cache is None else cache
 
     def compute(
@@ -436,7 +436,7 @@ class PHashDistance(_Metric):
     def __init__(
         self,
         hash_size: int = 16,
-        format: Literal["scalar", "flat", "matrix"] = "scalar",
+        out_format: Literal["scalar", "flat", "matrix"] = "scalar",
         cache: dict = None,
     ):
         """
@@ -446,7 +446,7 @@ class PHashDistance(_Metric):
         ----------
         hash_size : int, default=16
             Size of the perceptual hash in bits.
-        format : {"scalar", "flat", "matrix"}, default="scalar"
+        out_format : {"scalar", "flat", "matrix"}, default="scalar"
             Output format: scalar, flat list, or square matrix.
         cache : dict, optional
             Dictionary for caching intermediate results.
@@ -454,7 +454,7 @@ class PHashDistance(_Metric):
         """
         self.name = self.enum + f"_{hash_size}bit"
         self._hash_size = hash_size
-        self._format = format
+        self._format = out_format
         self._cache = {} if cache is None else cache
 
     def compute_similarity(self, alignment_x: Alignment, alignment_y: Alignment):

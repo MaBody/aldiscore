@@ -12,9 +12,12 @@ from Bio.SeqRecord import SeqRecord
 
 
 class DifficultyPredictor:
+    _GROUP_SIZE = 3  # Number of sequences per transitive consistency group
+
     def __init__(
         self,
         model: Union["lgb.Booster", Literal["latest", "vX.Y"], Path] = "latest",
+        max_samples: int = 333,
         seed: int = 0,
     ):
         if self._is_path(model):
@@ -29,12 +32,14 @@ class DifficultyPredictor:
         else:  # Try to use directly
             self.model = model
 
+        self._max_samples = max_samples
         self.seed = seed
 
     def predict(
         self,
         sequences: Union[List[SeqRecord], List[str], Path],
         in_format: str = "fasta",
+        in_type: Literal["DNA", "AA", "auto"] = "auto",
         drop_gaps: bool = True,
     ) -> float:
         # ensure correct input format
@@ -52,12 +57,25 @@ class DifficultyPredictor:
                 records.append(gapless)
             _sequences = records
 
+        # Initialize PSA config dict with max number of triplets/pairs
+        max_psa_count = self._max_samples * self._GROUP_SIZE
+        self._psa_config = {"MAX_PSA_COUNT": max_psa_count}
+
         # extract features
-        feat_df = FeatureExtractor(_sequences, seed=self.seed).compute()
+        feat_df = FeatureExtractor(
+            sequences=_sequences,
+            psa_config=self._psa_config,
+            track_perf=True,
+            data_type=in_type,
+            seed=self.seed,
+        ).compute()
+
         model_feats = self.model.feature_name()
         feat_df = feat_df[model_feats]
+
         # predict difficulty
         pred = self.model.predict(feat_df)[0]
+
         return pred
 
     def save(self, file_name: str) -> Path:

@@ -95,15 +95,35 @@ def shannon_entropy(probs: np.ndarray, axis: int = None):
     return -np.sum(dist * np.log2(dist), axis=axis)
 
 
-def js_divergence(p: np.ndarray, q: np.ndarray, axis: int):
-    p = p / np.sum(p, axis=axis, keepdims=True)
-    q = q / np.sum(q, axis=axis, keepdims=True)
-    m = (p + q) / 2
-    # Relative entropy must always be non-negative --> enforce with clip
-    left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
-    right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
-    js = np.sqrt((left + right) / 2)
-    return js
+# def js_divergence(p: np.ndarray, q: np.ndarray, axis: int):
+#     p = p / np.sum(p, axis=axis, keepdims=True)
+#     q = q / np.sum(q, axis=axis, keepdims=True)
+#     m = (p + q) / 2
+#     # Relative entropy must always be non-negative --> enforce with clip
+#     left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
+#     right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
+#     js = np.sqrt((left + right) / 2)
+#     return js
+
+
+def js_divergence(dist, axis=1, chunk_size=1000):
+    idxs = np.array(list(itertools.combinations(np.arange(len(dist)), r=2)))
+    n = idxs.shape[0]
+    results = []
+    # Process in chunks
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        p = dist[idxs[start:end, 0]]
+        q = dist[idxs[start:end, 1]]
+        p = p / np.sum(p, axis=axis, keepdims=True)
+        q = q / np.sum(q, axis=axis, keepdims=True)
+        m = (p + q) / 2
+        # Relative entropy must always be non-negative --> enforce with clip
+        left = np.sum(p * np.log(p / m), axis=1).clip(min=0)
+        right = np.sum(q * np.log(q / m), axis=1).clip(min=0)
+        js = np.sqrt((left + right) / 2)
+        results.append(js)
+    return np.concatenate(results)
 
 
 def load_features(

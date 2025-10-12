@@ -135,18 +135,20 @@ class FeatureExtractor(BaseFeatureExtractor):
         sequences: List[SeqRecord],
         psa_config: dict = None,
         track_perf: bool = False,
+        data_type: Literal["DNA", "AA", "auto"] = "auto",
         validate: Literal["warn", "error"] = "error",
         seed: int = 0,
     ):
         super().__init__(sequences, track_perf)
 
         self._validate_inputs(validate)
-        config = self._init_psa_config()
-        if psa_config is None:
-            psa_config = {}
-        config["DNA"].update(psa_config.get("DNA", {}))
-        config["AA"].update(psa_config.get("AA", {}))
-        self._psa_config = config
+
+        # If data_type == "auto", infer data_type in _init_basics
+        if data_type != "auto":
+            self._cache[self._DTYPE] = data_type
+
+        self._psa_config = self._init_psa_config(psa_config)
+
         self._seed = seed
 
     # ----------------------------------------------
@@ -170,47 +172,37 @@ class FeatureExtractor(BaseFeatureExtractor):
             else:
                 print(msg)
 
-    def _init_psa_config(self) -> Dict[str, Any]:
-        config = {}
-        config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
-        config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
-        config["MAX_COUNT"] = 1000
-        config["GROUP_SIZE"] = 3
-        return config
+    def _init_psa_config(self, psa_config: dict) -> Dict[str, Any]:
+        default_config = {}
+        if psa_config is None:
+            psa_config = {}
+
+        default_config["MAX_PSA_COUNT"] = psa_config.get("MAX_PSA_COUNT", 1000)
+        default_config["GROUP_SIZE"] = psa_config.get("GROUP_SIZE", 3)
+
+        default_config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
+        default_config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
+
+        default_config["DNA"].update(psa_config.get("DNA", {}))
+        default_config["AA"].update(psa_config.get("AA", {}))
+
+        return default_config
 
     # ------------------------------------------
     # --------- "HEAVY" INIT HELPERS -----------
     # ------------------------------------------
 
-    # @_feature
-    # # _init_cache needs to be called as a feature to support performance logs
-    # def _init_cache(self) ->Dict[str, str]:
-    #     self._cache[self._SEQ_ORD] = [
-    #         list(map(ord, str(seq_record.seq).upper()))
-    #         for seq_record in self._sequences
-    #     ]
-    #     self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
-    #     self._cache[self._SEQ_LEN] = np.array([len(seq) for seq in self._sequences])
-
-    #     will_overflow = self._cache[self._SEQ_LEN].max() >= 2**15
-    #     self._cache[self._INT_TYPE] = np.int32 if will_overflow else np.int16
-
-    #     self._cache[self._CHAR_DIST] = self._get_char_distributions()
-    #     alignments, groupings, scores = self._get_pairwise_alignments()
-    #     self._cache[self._PSA] = alignments
-    #     self._cache[self._PSA_GROUPS] = groupings
-    #     self._cache[self._PSA_SCORES] = scores
-    #     self._cache[self._PSA_INDEX_MAP] = self._get_psa_index_map()
-    #     return {}
-
     @_feature
     # _init_cache needs to be called as a feature to support performance logs
     def _init_basics(self) -> dict:
+        if not self._DTYPE in self._cache:
+            self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
+
         self._cache[self._SEQ_ORD] = [
             list(map(ord, str(seq_record.seq).upper()))
             for seq_record in self._sequences
         ]
-        self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
+
         self._cache[self._SEQ_LEN] = np.array([len(seq) for seq in self._sequences])
 
         will_overflow = self._cache[self._SEQ_LEN].max() >= 2**15
@@ -325,8 +317,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         name = "char_js"
         # Re-normalized in utils.js_divergence
         dist = self._get_cached(self._CHAR_DIST).clip(eps)
-        comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
-        js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
+        js = utils.js_divergence(dist, axis=1)
         feat_dict = self.descriptive_statistics(js, name)
         return feat_dict
 
@@ -341,8 +332,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         for tag, dist in zip(tags, dists):
             # Re-normalized in utils.js_divergence
             dist = dist.clip(eps)
-            comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
-            js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
+            js = utils.js_divergence(dist, axis=1)
             feat_dict.update(self.descriptive_statistics(js, name + "_" + tag))
         return feat_dict
 
@@ -471,8 +461,7 @@ class FeatureExtractor(BaseFeatureExtractor):
             dist = dist[dist.sum(axis=1) != 0]
             # Re-normalized in utils.js_divergence and utils.shannon_entropy
             dist = (dist / dist.sum(axis=1, keepdims=True)).clip(eps)
-            comb_idxs = np.array(list(it.combinations(np.arange(len(dist)), r=2))).T
-            js = utils.js_divergence(dist[comb_idxs[0]], dist[comb_idxs[1]], axis=1)
+            js = utils.js_divergence(dist, axis=1)
             feat_dict.update(self.descriptive_statistics(js, str(k) + name + "_js"))
 
             entros = utils.shannon_entropy(dist, axis=1)
@@ -535,7 +524,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         # Less than 3 sequences should not be processed anyway
         group_size = max(min(self._psa_config["GROUP_SIZE"], len(self._sequences)), 3)
         psas_per_group = group_size * (group_size - 1) // 2
-        max_num_groups = self._psa_config["MAX_COUNT"] // psas_per_group
+        max_num_groups = self._psa_config["MAX_PSA_COUNT"] // psas_per_group
         n = len(self._sequences)
         int_type = self._cache[self._INT_TYPE]
         psas = defaultdict(dict)
