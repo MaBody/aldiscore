@@ -242,7 +242,7 @@ def optuna_search(
 
     import optuna
     import lightgbm as lgb
-    from sklearn.model_selection import KFold
+    from sklearn.model_selection import KFold, train_test_split
 
     optuna.logging.set_verbosity(optuna.logging.ERROR)
 
@@ -276,29 +276,27 @@ def optuna_search(
             y_train_val, y_test = y.iloc[train_val_idx], y.iloc[test_idx]
 
             # Inner split for validation set
-            inner_kf = KFold(n_splits=2, shuffle=True, random_state=0)
-            for train_idx, val_idx in inner_kf.split(X_train_val, y_train_val):
-                X_train, X_val = X_train_val.iloc[train_idx], X_train_val.iloc[val_idx]
-                y_train, y_val = y_train_val.iloc[train_idx], y_train_val.iloc[val_idx]
-                # Train with early stopping on X_val, report test on X_test
-
-                model = lgb.LGBMRegressor(**temp)
-                model.fit(
-                    X_train,
-                    y_train,
-                    eval_set=[(X_val, y_val)],
-                    eval_metric="rmse",
-                    callbacks=[
-                        lgb.early_stopping(
-                            stopping_rounds=early_stopping,
-                            verbose=False,
-                        )
-                    ],
-                )
-                y_pred = model.predict(X_test)
-                fold_rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
-                scores.append(fold_rmse)
-                n_rounds.append(model.best_iteration_)
+            X_train, X_val, y_train, y_val = train_test_split(
+                X_train_val, y_train_val, test_size=0.15, random_state=0
+            )
+            # Train with early stopping on X_val, report test on X_test
+            model = lgb.LGBMRegressor(**temp)
+            model.fit(
+                X_train,
+                y_train,
+                eval_set=[(X_val, y_val)],
+                eval_metric="rmse",
+                callbacks=[
+                    lgb.early_stopping(
+                        stopping_rounds=early_stopping,
+                        verbose=False,
+                    )
+                ],
+            )
+            y_pred = model.predict(X_test)
+            fold_rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
+            scores.append(fold_rmse)
+            n_rounds.append(model.best_iteration_)
             trial.set_user_attr("best_iteration", model.best_iteration_)
         return np.median(scores)
 
