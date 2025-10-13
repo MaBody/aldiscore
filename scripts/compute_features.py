@@ -23,7 +23,10 @@ def process_dataset(dataset: str, source: str, data_dir: Path, queue: mp.Queue):
     seqs = list(
         SeqIO.parse(data_dir / source / dataset / "sequences.fasta", format="fasta")
     )
-    extractor = FeatureExtractor(seqs, track_perf=track_perf, validate="warn")
+    psa_config = {"MAX_PSA_COUNT": 300}
+    extractor = FeatureExtractor(
+        seqs, psa_config=psa_config, track_perf=track_perf, validate="warn"
+    )
     feats = extractor.compute()
 
     if track_perf:
@@ -79,7 +82,7 @@ if __name__ == "__main__":
     print("Detected CPUs:", mp.cpu_count())
     cpu_counts = [min(100, mp.cpu_count() - 2)] * len(sources)
     if "treebase_v1" in sources:
-        cpu_counts[sources.index("treebase_v1")] = mp.cpu_count() - 20
+        cpu_counts[sources.index("treebase_v1")] = mp.cpu_count() - 10
 
     manager = mp.Manager()
     queue = manager.Queue() if _TRACK_PERF else None

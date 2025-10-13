@@ -182,7 +182,7 @@ def main():
     predict_parser.add_argument(
         "--max-samples",
         type=int,
-        default=333,
+        default=100,
         help="Upper bound on number of sequence triplets sampled for transitive consistency features. Trade-off between variance and compute. Defaults to 333.",
     )
     predict_parser.add_argument(
