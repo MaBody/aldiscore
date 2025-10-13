@@ -24,7 +24,7 @@ model = utils.optuna_search(
     X,
     y,
     early_stopping=25,
-    n_trials=1000,
+    n_trials=500,
     n_estimators=1500,
     n_jobs=-1,
 )

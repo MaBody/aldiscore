@@ -16,6 +16,7 @@ todos.md
 temp.py
 model.md
 figures/
+*.phy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
