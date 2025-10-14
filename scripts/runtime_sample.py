@@ -12,8 +12,7 @@ import shutil
 import multiprocessing as mp
 from tqdm import tqdm
 
-DATA_DIR = Path("/hits/fast/cme/bodynems/data/paper")
-OUT_DIR = Path("/hits/fast/cme/bodynems/data/benchmarking")
+DATA_DIR = Path("/hits/fast/cme/bodynems/data/benchmarking")
 sample = pd.read_parquet(ROOT.parent / "logs" / "misc" / "runtime_sample.parquet")
 sample
 
@@ -23,7 +22,7 @@ def process_heuristic(row):
     ens_dir = DATA_DIR / source / dataset / "ensemble"
     t1 = perf_counter()
     ensemble = Ensemble.load(ens_dir)
-    DPosDistance().compute(ensemble, drop_gaps=False)
+    DPosDistance().compute(ensemble)
     t2 = perf_counter()
     return {(source, dataset): t2 - t1}
 
@@ -41,12 +40,12 @@ def process_prediction(row):
 
 if __name__ == "__main__":
     perf_dict = {}
-    n_cores = 70
+    n_cores = 1
 
     # Process heuristics
     with mp.Pool(n_cores) as pool:
         rows = map(lambda r: r[1].to_list(), sample.iterrows())
-        for out in tqdm(pool.imap_unordered(process_heuristic, rows)):
+        for out in tqdm(pool.imap(process_heuristic, list(rows)[:11])):
             perf_dict.update(out)
 
     perf_df = pd.DataFrame(
@@ -61,7 +60,7 @@ if __name__ == "__main__":
     perf_dict = {}
     with mp.Pool(n_cores) as pool:
         rows = map(lambda r: r[1].to_list(), sample.iterrows())
-        for out in tqdm(pool.imap_unordered(process_prediction, rows)):
+        for out in tqdm(pool.imap(process_prediction, list(rows)[:11])):
             perf_dict.update(out)
 
     perf_df = pd.DataFrame(
