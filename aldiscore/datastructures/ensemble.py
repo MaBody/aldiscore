@@ -62,6 +62,6 @@ class Ensemble:
         alignments = []
         for msa_file in sorted(os.listdir(ensemble_dir)):
             msa = read(ensemble_dir / msa_file, in_format)
-            alignment = Alignment(msa=msa, data_type=in_type, sort_sequences=False)
+            alignment = Alignment(msa=msa, data_type=in_type)
             alignments.append(alignment)
         return Ensemble(alignments)
