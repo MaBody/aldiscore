@@ -18,6 +18,7 @@ model.md
 figures/
 *.phy
 test_error.py
+test_error.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
