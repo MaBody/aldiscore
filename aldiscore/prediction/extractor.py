@@ -372,8 +372,7 @@ class FeatureExtractor(BaseFeatureExtractor):
     def _transitive_consistency(self) -> Dict[str, float]:
         """Computes measures of transitive consistency on the PSA groups."""
         name = "psa_tc"
-        similarity_func = lambda x, y: np.sum(x == y) / len(x)
-        scores = self._compute_consistency(name, similarity_func)
+        scores = self._compute_consistency(name)
 
         feat_dict = {}
         for tag in scores:
@@ -584,39 +583,36 @@ class FeatureExtractor(BaseFeatureExtractor):
                 index_map[idx_a][idx_b] = positions
         return index_map
 
-    def _compute_consistency(self, name: str, similarity_func) -> dict:
+    def _compute_consistency(self, name: str) -> dict:
         groups = self._get_cached(self._PSA_GROUPS)
         index_map = self._get_cached(self._PSA_INDEX_MAP)
         score_dict = defaultdict(list)
         # Loop over groups of r sequences (usually r=3)
         for group in groups:
             group_scores = []
-            # Loop over all pairwise combinations (with replacement)
-            for idx_pair in it.product(group, group):
+            # Loop over all pairwise combinations
+            for idx_pair in it.combinations(group, r=2):
                 idx_a, idx_c = idx_pair
-                if idx_a == idx_c:
-                    continue
                 pos_ac = index_map[idx_a][idx_c]
                 others = set(group).difference(idx_pair)
                 # Loop over all remaining r-2 indices (with r=3 only 1 remaining)
                 for idx_b in others:
+                    # Process all positions of a target alignment in vectorized form
                     pos_ab = index_map[idx_a][idx_b]
                     pos_bc = index_map[idx_b][idx_c]
+                    # Mask positions with gap alignments (consistency not defined)
                     mask = (pos_ab != GAP_CODE) & (pos_ac != GAP_CODE)
                     if np.sum(mask) > 0:
                         group_scores.append(
-                            similarity_func(pos_ac[mask], pos_bc[pos_ab[mask]])
+                            np.mean(pos_ac[mask] == pos_bc[pos_ab[mask]])
                         )
-            # Compute summary statistics (6 consistency values per group if r=3)
+            # Compute summary statistics (1 value per PSA, 3 PSAs total if r=3)
             group_scores = np.array(group_scores)
             score_dict[name + "_min"].append(group_scores.min())
             score_dict[name + "_mean"].append(group_scores.mean())
             score_dict[name + "_std"].append(group_scores.std())
             score_dict[name + "_max"].append(group_scores.max())
             score_dict[name + "_p50"].append(np.percentile(group_scores, 50))
-            # for p in [1, 5, 10, 25, 75, 90, 95]:
-            #     scores[name + f"_p{p}"].append(np.percentile(group_scores, p))
-            # scores[name + "_iqr"] = scores[name + "p75"] - scores[name + "p25"]
 
         return score_dict
 
