@@ -17,7 +17,7 @@ class DifficultyPredictor:
     def __init__(
         self,
         model: Union["lgb.Booster", Literal["latest", "vX.Y"], Path] = "latest",
-        max_samples: int = 333,
+        max_samples: int = 100,
         seed: int = 0,
     ):
         if self._is_path(model):
