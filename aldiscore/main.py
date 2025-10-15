@@ -1,3 +1,20 @@
+"""
+Command line interface for the aldiscore package.
+
+This module provides a CLI for computing alignment difficulty scores using two approaches:
+1. Heuristic scoring: Computes difficulty metrics for an ensemble of alternative MSAs
+   - Pairwise methods (d_SSP, d_seq, d_pos)
+   - Set-based methods (conf_set, conf_entropy, conf_displace)
+2. ML-based prediction: Predicts difficulty for unaligned sequences using trained models
+
+Usage:
+    Heuristic mode:
+        aldiscore heuristic <in-dir> [--method] [--out-format] [--in-format]
+
+    Prediction mode:
+        aldiscore predict <in-path> [--model] [--seed] [--max-samples] [--in-format] [--in-type] [--drop-gaps]
+"""
+
 import argparse
 import pathlib
 from rich_argparse import RichHelpFormatter, RawTextRichHelpFormatter
@@ -8,19 +25,45 @@ import sys
 
 console = Console()
 
+# Available scoring modes and their corresponding methods
 heuristic_modes = ["pairwise", "set-based"]
 mode_map = {}
 mode_map["pairwise"] = list(map(str, [ME.D_SSP, ME.D_SEQ, ME.D_POS]))
 mode_map["set-based"] = list(map(str, [ME.CONF_SET, ME.CONF_ENTROPY, ME.CONF_DISPLACE]))
 
+# Valid output formats for each scoring mode
 out_format_map = {}
-out_format_map["pairwise"] = ["scalar", "flat", "matrix"]
-out_format_map["set-based"] = ["scalar", "sequence", "residue"]
+out_format_map["pairwise"] = [
+    "scalar",
+    "flat",
+    "matrix",
+]  # matrix: NxN distance matrix, flat: pairwise list
+out_format_map["set-based"] = [
+    "scalar",
+    "sequence",
+    "residue",
+]  # sequence/residue: per-sequence/position scores
 
 
 def handle_heuristic_mode(in_dir, in_format, method, out_format):
     """
-    Handles heuristic mode (pairwise or set_based) depending on method.
+    Process an ensemble of MSAs using heuristic scoring methods.
+
+    Args:
+        in_dir (Path): Directory containing multiple MSA files
+        in_format (str): Input file format (e.g., 'fasta', 'phylip')
+        method (str): Scoring method to use:
+            Pairwise: 'd_ssp', 'd_seq', 'd_pos'
+            Set-based: 'conf_set', 'conf_entropy', 'conf_displace'
+        out_format (str): Output format:
+            Pairwise: 'scalar', 'flat', 'matrix'
+            Set-based: 'scalar', 'sequence', 'residue'
+
+    Returns:
+        Various: Score(s) in the specified format.
+
+    Raises:
+        ValueError: If method or out_format is invalid for the selected mode
     """
     for mode in heuristic_modes:
         method_valid = method in mode_map[mode]
@@ -89,6 +132,20 @@ def handle_predict_mode(
 
 
 def get_formatter_cls(cls):
+    """
+    Create a formatter class for argparse with custom formatting settings.
+
+    Args:
+        cls: Base formatter class (RichHelpFormatter or RawTextRichHelpFormatter)
+
+    Returns:
+        callable: Formatter factory function with custom settings
+
+    Note:
+        Uses rich library for enhanced CLI help formatting with:
+        - Custom indentation for better readability
+        - Dynamic width adjustment based on terminal size
+    """
     formatter_class = lambda prog: cls(
         prog,
         max_help_position=40,  # indent before description starts
@@ -100,7 +157,13 @@ def get_formatter_cls(cls):
 
 
 def main():
+    """
+    Main entry point for the aldiscore CLI.
 
+    Exit codes:
+        0: Success
+        1: Error (with traceback written to stderr)
+    """
     parser = argparse.ArgumentParser(
         description="A command-line tool for alignment difficulty prediction and scoring.",
         formatter_class=get_formatter_cls(RichHelpFormatter),
@@ -117,7 +180,7 @@ def main():
     heuristic_parser.add_argument(
         "in-dir",
         type=pathlib.Path,
-        help="Path to input directory containing multiple MSA files.",
+        help="Path to input directory containing multiple alternative MSA files.",
     )
     heuristic_parser.add_argument(
         "--in-format",
