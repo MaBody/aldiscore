@@ -36,6 +36,7 @@ class Alignment:
             msa (MultipleSeqAlignment): The input MSA object.
             data_type (DataTypeEnum, optional): Data type of the sequences. If None, inferred automatically.
             sort_sequences (bool, optional): If True, sequences are sorted in a stable order.
+                Sequences must be in order to compute dispersion heuristics!
         """
         # Applies a stable sorting to the sequences
         self._sorted = sort_sequences
