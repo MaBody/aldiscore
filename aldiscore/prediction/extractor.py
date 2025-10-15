@@ -120,6 +120,31 @@ class BaseFeatureExtractor(ABC):
 
 
 class FeatureExtractor(BaseFeatureExtractor):
+    """
+    Extracts features from biological sequences for alignment difficulty prediction.
+
+    This class computes a comprehensive set of features from sequence data, including:
+    - Basic sequence properties (length, entropy, character distributions)
+    - Pairwise sequence alignment (PSA) based features (e.g., transitive consistency)
+    - k-mer based similarity measures
+    - Gap statistics
+
+    The features are used to predict how difficult it will be to correctly align
+    a set of sequences. Features are computed using a combination of exact calculations
+    and sampling approaches for computational efficiency.
+
+    Attributes:
+        _SEQ_ORD (str): Cache key for sequence ordinal representation
+        _SEQ_LEN (str): Cache key for sequence lengths
+        _CHAR_DIST (str): Cache key for character distributions
+        _PSA (str): Cache key for pairwise alignments
+        _PSA_GROUPS (str): Cache key for sampled sequence groups
+        _PSA_SCORES (str): Cache key for alignment scores
+        _PSA_INDEX_MAP (str): Cache key for position mappings
+        _DTYPE (str): Cache key for sequence type (DNA/AA)
+        _INT_TYPE (str): Cache key for numeric type used in computations
+    """
+
     _SEQ_ORD = "seq_ord"
     _SEQ_LEN = "seq_length"
     _CHAR_DIST = "char_dist"
@@ -139,6 +164,21 @@ class FeatureExtractor(BaseFeatureExtractor):
         validate: Literal["warn", "error"] = "error",
         seed: int = 0,
     ):
+        """
+        Initialize the feature extractor.
+
+        Args:
+            sequences: List of BioPython SeqRecord objects containing the sequences
+            psa_config: Configuration for pairwise sequence alignment
+                       Contains alignment parameters and sampling settings
+            track_perf: Whether to track computation time for each feature
+            data_type: Type of sequences - "DNA", "AA" or "auto" for automatic detection
+            validate: How to handle validation errors - "warn" or "error"
+            seed: Random seed for reproducible sampling
+
+        Raises:
+            ValueError: If validation fails and validate="error"
+        """
         super().__init__(sequences, track_perf)
 
         self._validate_inputs(validate)
@@ -156,6 +196,21 @@ class FeatureExtractor(BaseFeatureExtractor):
     # ----------------------------------------------
 
     def _validate_inputs(self, validate: Literal["warn", "error"]):
+        """
+        Validate input sequences.
+
+        Checks:
+        1. At least 3 sequences are provided (required for transitive consistency)
+        2. All sequences have length > 1
+
+        Args:
+            validate: How to handle validation failures
+                     "warn": Print warning message
+                     "error": Raise ValueError
+
+        Raises:
+            ValueError: If validation fails and validate="error"
+        """
         n = len(self._sequences)
         if n <= 2:
             msg = f"WARNING: Need at least 3 sequences, found {n}"
@@ -173,6 +228,20 @@ class FeatureExtractor(BaseFeatureExtractor):
                 print(msg)
 
     def _init_psa_config(self, psa_config: dict) -> Dict[str, Any]:
+        """
+        Initialize configuration for pairwise sequence alignment.
+
+        Sets up default parameters for DNA and protein alignments using parasail,
+        which can be overridden by the provided config.
+
+        Args:
+            psa_config: Dictionary containing custom PSA parameters
+                       Can override defaults for gap penalties, scoring matrices,
+                       and sampling parameters
+
+        Returns:
+            Complete configuration dictionary with all required parameters
+        """
         default_config = {}
         if psa_config is None:
             psa_config = {}
@@ -286,8 +355,25 @@ class FeatureExtractor(BaseFeatureExtractor):
     # TODO: Included in FRST randomness features!
     @_feature
     def _sequence_entropy(self) -> Dict[str, float]:
-        """Computes the {min, max, mean ...} intra-sequence Shannon Entropy."""
-        eps = 1e-8
+        """
+        Compute sequence-wise Shannon entropy from character distributions.
+
+        Calculates normalized Shannon entropy for each sequence independently,
+        then computes summary statistics (min, max, mean, percentiles etc.)
+        across all sequences.
+
+        Features reflect sequence complexity and variability. Higher entropy
+        indicates more diverse character usage, potentially more complex alignment.
+
+        Returns:
+            Dictionary mapping feature names to values:
+            - char_ent_min: Minimum entropy across sequences
+            - char_ent_max: Maximum entropy
+            - char_ent_mean: Mean entropy
+            - char_ent_std: Standard deviation
+            - char_ent_pXX: Percentiles (XX = 1,5,10,...)
+        """
+        eps = 1e-8  # Small constant to avoid log(0)
         name = "char_ent"
         dists = self._get_cached(self._CHAR_DIST).clip(eps)
         dists = dists.clip(eps)
@@ -312,8 +398,24 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _char_js_divergence(self) -> Dict[str, float]:
-        """Computes the {min, max, mean ...} pairwise Jensen-Shannon Divergence."""
-        eps = 1e-8
+        """
+        Compute pairwise Jensen-Shannon divergence between sequence character distributions.
+
+        The JS divergence measures how different the character usage is between sequences.
+        Higher divergence indicates more dissimilar sequences, which may be harder to align.
+
+        Features are generated by computing pairwise JS divergences and then calculating
+        summary statistics across all pairs.
+
+        Returns:
+            Dictionary mapping feature names to values:
+            - char_js_min: Minimum JS divergence between any pair
+            - char_js_max: Maximum divergence
+            - char_js_mean: Mean divergence
+            - char_js_std: Standard deviation
+            - char_js_pXX: Percentiles (XX = 1,5,10,...)
+        """
+        eps = 1e-8  # Small constant for numerical stability
         name = "char_js"
         # Re-normalized in utils.js_divergence
         dist = self._get_cached(self._CHAR_DIST).clip(eps)
@@ -370,7 +472,28 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _transitive_consistency(self) -> Dict[str, float]:
-        """Computes measures of transitive consistency on the PSA groups."""
+        """
+        Compute transitive consistency scores from sampled sequence triplets.
+
+        For each triplet (A,B,C), checks if aligned positions are consistent:
+        If A[i] aligns to B[j] and B[j] aligns to C[k], then A[i] should align to C[k].
+
+        Lower consistency indicates potential alignment ambiguity or difficulty.
+        Uses sampling for efficiency on large datasets.
+
+        Aggregation process:
+            - Average residue scores across single PSA for mean consistency
+            - Aggregate across 3 PSAs per triplet (resulting in the 5 features below)
+            - Aggregate across all sampled triplets (standard summary statistics)
+
+        Returns:
+            Dictionary with statistics about consistency scores. On top, we compute summary statistics
+            - psa_tc_min: Minimum consistency in any triplet
+            - psa_tc_mean: Mean consistency across triplets
+            - psa_tc_std: Standard deviation of consistency
+            - psa_tc_max: Maximum consistency
+            - psa_tc_p50: Median consistency
+        """
         name = "psa_tc"
         scores = self._compute_consistency(name)
 
@@ -439,8 +562,25 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     @_feature
     def _kmer_similarity(self) -> Dict[str, float]:
+        """
+        Compute k-mer based similarity measures between sequences.
+
+        For different values of k (4,7,10,13), computes:
+        1. k-mer entropy: Diversity of k-mers within each sequence
+        2. k-mer JS divergence: Difference in k-mer usage between sequences
+           (only for k < 10 due to computational cost)
+
+        Features capture local sequence similarity at different scales.
+        Small k captures local motifs, large k captures longer patterns.
+
+        Returns:
+            Dictionary with features for each k:
+            - {k}-mer_ent_*: k-mer entropy statistics
+            - {k}-mer_js_*: k-mer JS divergence statistics (k < 10)
+            Where * includes min, max, mean, std, and percentiles
+        """
         name = "-mer"
-        Ks = [4, 7, 10, 13]
+        Ks = [4, 7, 10, 13]  # Different k-mer lengths to analyze
         eps = 1e-8
         feat_dict = {}
         seqs = self._get_cached(self._SEQ_ORD)
