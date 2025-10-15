@@ -12,6 +12,23 @@ from Bio.SeqRecord import SeqRecord
 
 
 class DifficultyPredictor:
+    """
+    Predicts alignment difficulty for a set of biological sequences.
+
+    Uses a trained LightGBM model to predict how difficult it will be to correctly
+    align a given set of sequences. The prediction is based on features extracted
+    from the sequences using the FeatureExtractor class.
+
+    The predictor can:
+    1. Load pre-trained models from files or use custom models
+    2. Process sequences in various input formats (FASTA files, strings, SeqRecords)
+    3. Handle both DNA and protein sequences
+    4. Optionally remove gaps from input sequences
+
+    Attributes:
+        _GROUP_SIZE (int): Number of sequences used in transitive consistency calculations
+    """
+
     _GROUP_SIZE = 3  # Number of sequences per transitive consistency group
 
     def __init__(
@@ -20,6 +37,22 @@ class DifficultyPredictor:
         max_samples: int = 100,
         seed: int = 0,
     ):
+        """
+        Initialize the difficulty predictor.
+
+        Args:
+            model: The model to use for prediction. Can be:
+                  - Path to a model file
+                  - "latest" to use the most recent version
+                  - A version string like "v1.0"
+                  - A pre-loaded LightGBM model
+            max_samples: Maximum number of sequence triplets to sample
+                       Controls computation time vs. prediction stability
+            seed: Random seed for reproducible sampling
+
+        Raises:
+            ValueError: If the model file cannot be found or loaded
+        """
         if self._is_path(model):
             self.model: "lgb.Booster" = lgb.Booster(model_file=Path(model))
         elif isinstance(model, str):
@@ -42,6 +75,22 @@ class DifficultyPredictor:
         in_type: Literal["DNA", "AA", "auto"] = "auto",
         drop_gaps: bool = True,
     ) -> float:
+        """
+        Predict alignment difficulty for a set of sequences.
+
+        Args:
+            sequences: Input sequences, either a path or BioPython objects.
+            in_format: File format if sequences is a Path (e.g., "fasta")
+            in_type: Type of sequences - "DNA", "AA" or "auto" for detection
+            drop_gaps: Whether to remove gaps from input sequences. Convenient if input file is aligned.
+
+        Returns:
+            float: Predicted difficulty score
+                  Higher values indicate sequences that are harder to align
+
+        Raises:
+            ValueError: If feature extraction fails
+        """
         # ensure correct input format
         if self._is_path(sequences):
             _sequences = list(SeqIO.parse(sequences, format=in_format))
@@ -79,6 +128,19 @@ class DifficultyPredictor:
         return pred
 
     def save(self, file_name: str) -> Path:
+        """
+        Save the current model to a file.
+
+        Args:
+            file_name: Name of the file to save the model to
+                      Will be saved in the package's models directory
+
+        Returns:
+            Path: Full path to the saved model file
+
+        Raises:
+            ValueError: If a file with the given name already exists
+        """
         models = os.listdir(ROOT / "models")
         if file_name in models:
             raise ValueError(f"File '{file_name}' exists already")
@@ -87,7 +149,16 @@ class DifficultyPredictor:
 
         return ROOT / "models" / file_name
 
-    def _is_path(self, input):
+    def _is_path(self, input) -> bool:
+        """
+        Check if the input is a valid file path.
+
+        Args:
+            input: Object to check
+
+        Returns:
+            bool: True if input is a Path object or an existing file path string
+        """
         return isinstance(input, Path) or (
             isinstance(input, str) and os.path.exists(input)
         )
