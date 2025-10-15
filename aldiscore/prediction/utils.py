@@ -14,10 +14,22 @@ from aldiscore import RSTATE
 
 def sample_index_tuples(n: int, r: int, k: int, seed: int):
     """
-    This is necessary because itertools.combinations is inefficient for sampling + combinatorics.
-    - n: index range
-    - r: tuple length
-    - k: (maximum) number of tuples
+    Sample k r-tuples from range(n) without replacement.
+
+    More efficient than using itertools.combinations for large n and r.
+
+    Args:
+        n: Size of index range to sample from
+        r: Length of each tuple
+        k: Number of tuples to sample
+        seed: Random seed for reproducibility
+
+    Returns:
+        List of k sorted tuples, each containing r unique indices
+
+    Note:
+        Uses rejection sampling - generates more tuples than needed
+        and filters out those with duplicate indices.
     """
     samples = set()
     max_comb = math.comb(n, r)
@@ -46,7 +58,20 @@ def sample_index_tuples(n: int, r: int, k: int, seed: int):
 
 
 def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
-    """Computes the gap lengths in a given alignment. Non-gapped positions are encoded with gap_code."""
+    """
+    Compute the length of gap regions in sequence alignments.
+
+    For each position that ends a gap region, stores the length of that gap.
+    All other positions contain 0.
+
+    Args:
+        alignment: 2D array of sequences, gaps marked with gap_code
+        gap_code: Integer code used to represent gaps
+
+    Returns:
+        2D array same shape as alignment, where each position ending
+        a gap region contains the length of that gap, others contain 0
+    """
     gap_mask = alignment == gap_code
     gap_ends = np.diff(gap_mask, n=1, axis=1, append=0) == -1
     # gap_counts contains an incrementing counter for gapped positions in each sequence
@@ -69,7 +94,19 @@ def compute_gap_lengths(alignment: np.ndarray, gap_code) -> np.ndarray:
 
 def repeat_distributions(seq_arrs: List[np.ndarray]) -> Tuple[np.ndarray]:
     """
-    Occurrences of homopolymers and their lengths.
+    Compute distributions of repeated elements (homopolymers) in sequences.
+
+    For each sequence, finds:
+    1. Distribution of specific repeat patterns (e.g., AAA vs TTT)
+    2. Distribution of repeat lengths (e.g., how many 2-mers vs 3-mers)
+
+    Args:
+        seq_arrs: List of sequences as integer arrays
+
+    Returns:
+        Tuple of two arrays:
+        - count_arr: Normalized counts of each specific repeat pattern
+        - len_arr: Normalized counts of each repeat length
     """
     count_table = defaultdict(partial(np.zeros, shape=len(seq_arrs)))
     len_table = defaultdict(partial(np.zeros, shape=len(seq_arrs)))
@@ -92,7 +129,18 @@ def repeat_distributions(seq_arrs: List[np.ndarray]) -> Tuple[np.ndarray]:
     return count_arr, len_arr
 
 
-def shannon_entropy(probs: np.ndarray, axis: int = None):
+def shannon_entropy(probs: np.ndarray, axis: int = None) -> np.ndarray:
+    """
+    Compute Shannon entropy of probability distributions.
+
+    Args:
+        probs: Array of probability values
+        axis: Axis to sum over when computing entropy
+              If None, compute total entropy
+
+    Returns:
+        Array of entropy values. If axis is None, returns a scalar.
+    """
     dist = probs / probs.sum(axis=axis, keepdims=axis is not None)
     return -np.sum(dist * np.log2(dist), axis=axis)
 
@@ -109,7 +157,21 @@ def shannon_entropy(probs: np.ndarray, axis: int = None):
 
 
 def js_divergence(dist: np.ndarray, axis=1, chunk_size=5e7):
+    """
+    Compute pairwise Jensen-Shannon divergence between probability distributions.
 
+    Efficiently computes JS divergence between all pairs of distributions in dist.
+    Uses chunking to handle large distributions memory-efficiently.
+
+    Args:
+        dist: Array of probability distributions, shape (n_distributions, n_bins)
+        axis: Axis containing the probability values (default=1)
+        chunk_size: Maximum number of values to process at once
+                   Lower values use less memory but compute slower
+
+    Returns:
+        Flat array of JS divergences between all pairs.
+    """
     idxs = np.array(list(itertools.combinations(range(len(dist)), r=2)))
     n_pairs = idxs.shape[0]
     n_bins = dist.shape[1]
@@ -140,6 +202,29 @@ def load_features(
     include_features: list = None,
     drop_na: bool = True,
 ) -> Tuple[pd.DataFrame]:
+    """
+    Load feature and label data for model training.
+
+    Args:
+        data_dir: Directory containing feature data
+        exclude_sources: List of source files to exclude
+        include_sources: List of source files to include (mutually exclusive with exclude)
+        label_scale: How to scale labels:
+                    - "auto": Scale by maximum value
+                    - float: Scale by this value
+        exclude_features: List of feature patterns to exclude
+        include_features: List of feature patterns to include
+        drop_na: Whether to drop rows with missing values
+
+    Returns:
+        Tuple of DataFrames:
+        - Features used for training
+        - Dropped features
+        - Labels (difficulty scores)
+
+    Raises:
+        AssertionError: If both include and exclude are specified
+    """
     assert_msg = "Specify either 'exclude_{0}' or 'include_{0}'"
     assert not (exclude_sources and include_sources), assert_msg.format("sources")
     assert not (exclude_features and include_features), assert_msg.format("features")
@@ -201,6 +286,19 @@ def load_features(
 
 
 def train_test_valid_split(index: pd.Index):
+    """
+    Split data indices into train, validation and test sets.
+
+    Uses a 80/10/10 split ratio:
+    1. Split into 80% train, 10% test+valid
+    2. Split test+valid into 50% test, 50% valid
+
+    Args:
+        index: Pandas index to split
+
+    Returns:
+        Three lists of indices for train, validation and test sets
+    """
     from sklearn.model_selection import train_test_split
 
     train_idxs, test_idxs = train_test_split(
@@ -213,6 +311,23 @@ def train_test_valid_split(index: pd.Index):
 
 
 def compute_metrics(model, X, y):
+    """
+    Compute regression metrics for model evaluation.
+
+    Calculates:
+    - RMSE (Root Mean Squared Error)
+    - MAE (Mean Absolute Error)
+    - R² score
+    - Correlation coefficient
+
+    Args:
+        model: Trained model with predict() method
+        X: Feature matrix
+        y: True target values
+
+    Returns:
+        DataFrame with computed metrics
+    """
     from sklearn.metrics import r2_score
 
     y_pred = model.predict(X)
@@ -239,6 +354,34 @@ def optuna_search(
     n_estimators: int = 500,
     n_jobs: int = 1,
 ):
+    """
+    Perform hyperparameter optimization for LightGBM model using Optuna.
+
+    Uses k-fold cross validation with early stopping to find optimal parameters.
+    Optimizes for RMSE on validation set.
+
+    Args:
+        X: Feature matrix
+        y: Target values
+        early_stopping: Number of rounds without improvement before stopping
+        n_trials: Number of parameter combinations to try
+        n_estimators: Maximum number of boosting rounds
+        n_jobs: Number of parallel jobs for optimization
+
+    Returns:
+        Optimized LGBMRegressor model
+
+    Note:
+        Tunes the following parameters:
+        - subsample
+        - learning_rate
+        - colsample_bytree
+        - feature_fraction_bynode
+        - min_child_samples
+        - num_leaves
+        - reg_alpha
+        - reg_lambda
+    """
 
     import optuna
     import lightgbm as lgb
