@@ -133,7 +133,7 @@ Our preferred uncertainty quantification method is the pairwise $\text{d}_{\text
 
 ### Prediction Model
 
-The prediction functionality allows estimating alignment difficulty directly from unaligned sequences, without the need to compute alternative alignments. This is achieved through a machine learning model that was trained on over 11,000 MSA datasets of DNA and AA sequences. For the regression quality, we report an RMSE of 0.04.
+The prediction functionality allows estimating alignment difficulty directly from unaligned sequences, without the need to compute alternative alignments. This is achieved through a machine learning model that was trained on over 11,000 MSA datasets of DNA and AA sequences. For the labels, we used the d_pos metric on a diverse ensemble of 48 alignments. Regarding model performance, we report an RMSE of 0.04.
 
 Key features:
 - Fast prediction without alignment computation
