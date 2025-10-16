@@ -3,10 +3,13 @@ channels:
 - bioconda
 - conda-forge
 dependencies:
-- python>=3.12
-- biopython
-- pandas
+- python>=3.8
 - numpy
-- tqdm
 - scipy
-# - ipykernel
+- pandas
+- biopython
+- lightgbm
+- matplotlib
+- rich_argparse
+- parasail
+- pyyaml
