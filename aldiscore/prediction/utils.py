@@ -201,7 +201,7 @@ def load_features(
     exclude_features: list = None,
     include_features: list = None,
     drop_na: bool = True,
-) -> Tuple[pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
     """
     Load feature and label data for model training.
 
@@ -282,7 +282,10 @@ def load_features(
         feat_df = feat_df[~nan_mask]
         label_df = label_df[~nan_mask]
 
-    return feat_df, drop_df, label_df
+    # Convert singleton dataframe to series
+    labels = label_df.iloc[:, 0]
+
+    return feat_df, drop_df, labels
 
 
 def train_test_valid_split(index: pd.Index):
@@ -349,7 +352,6 @@ def compute_metrics(model, X, y):
 def optuna_search(
     X,
     y,
-    early_stopping: int = 25,
     n_trials: int = 100,
     n_estimators: int = 500,
     n_jobs: int = 1,
@@ -363,7 +365,6 @@ def optuna_search(
     Args:
         X: Feature matrix
         y: Target values
-        early_stopping: Number of rounds without improvement before stopping
         n_trials: Number of parameter combinations to try
         n_estimators: Maximum number of boosting rounds
         n_jobs: Number of parallel jobs for optimization
@@ -382,12 +383,13 @@ def optuna_search(
         - reg_alpha
         - reg_lambda
     """
-
     import optuna
     import lightgbm as lgb
-    from sklearn.model_selection import KFold, train_test_split
+    from sklearn.model_selection import KFold
 
     optuna.logging.set_verbosity(optuna.logging.ERROR)
+
+    _N_JOBS_MODEL = 4
 
     def objective(trial: optuna.Trial, params: dict, X, y):
         temp = params.copy()
@@ -411,43 +413,27 @@ def optuna_search(
         )
 
         scores = []
-        n_rounds = []
         # Outer split for test set
         outer_kf = KFold(n_splits=10, shuffle=True, random_state=0)
-        for train_val_idx, test_idx in outer_kf.split(X, y):
-            X_train_val, X_test = X.iloc[train_val_idx], X.iloc[test_idx]
-            y_train_val, y_test = y.iloc[train_val_idx], y.iloc[test_idx]
+        for train_idx, test_idx in outer_kf.split(X, y):
+            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-            # Inner split for validation set
-            X_train, X_val, y_train, y_val = train_test_split(
-                X_train_val, y_train_val, test_size=0.15, random_state=0
-            )
-            # Train with early stopping on X_val, report test on X_test
-            model = lgb.LGBMRegressor(**temp)
-            model.fit(
-                X_train,
-                y_train,
-                eval_set=[(X_val, y_val)],
-                eval_metric="rmse",
-                callbacks=[
-                    lgb.early_stopping(
-                        stopping_rounds=early_stopping,
-                        verbose=False,
-                    )
-                ],
-            )
+            # Train model, report test performance
+            model = lgb.LGBMRegressor(**temp, n_jobs=min(n_jobs, _N_JOBS_MODEL))
+            model.fit(X_train, y_train, eval_metric="rmse")
+
             y_pred = model.predict(X_test)
             fold_rmse = np.sqrt(np.mean((y_pred - y_test) ** 2))
             scores.append(fold_rmse)
-            n_rounds.append(model.best_iteration_)
             trial.set_user_attr("best_iteration", model.best_iteration_)
+
         return np.median(scores)
 
     params = {
         "objective": "regression",
         "metric": "rmse",
         "n_estimators": n_estimators,
-        "n_jobs": 1,
         "verbosity": -1,
         "importance_type": "gain",
     }
@@ -456,9 +442,11 @@ def optuna_search(
     objective_func = partial(objective, params=params, X=X, y=y)
 
     study.optimize(
-        objective_func, n_trials=n_trials, n_jobs=n_jobs, show_progress_bar=True
+        objective_func,
+        n_trials=n_trials,
+        n_jobs=max(1, n_jobs // _N_JOBS_MODEL),
+        show_progress_bar=True,
     )
     params.update(study.best_params)
-    params["n_estimators"] = study.best_trial.user_attrs["best_iteration"]
 
     return lgb.LGBMRegressor(**params)
