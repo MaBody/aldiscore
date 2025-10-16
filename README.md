@@ -1,42 +1,127 @@
-# AlDiScore - Alignment Dispersion Score
+# AlDiScore - Alignment Difficulty Score
 
-This package implements several measures of dispersion within an ensemble of multiple sequence alignments of the same sequencing dataset.
+AlDiScore provides two approaches for quantifying multiple sequence alignment (MSA) difficulty:
 
-## Setup
+1. **Heuristic Scoring**: Compute dispersion within an ensemble of alternative alignments
+2. **Predictive Scoring**: Predict alignment difficulty from unaligned sequences using ML
 
-1. Clone this repository.
-2. Use the `environment.yml` file to set up the conda environment:
+## Features
+
+- Command-line interface for heuristics and prediction
+- Multiple scoring methods for ensemble analysis
+- Pre-trained models for difficulty prediction
+- Supports DNA and amino acid sequences
+
+## Setup 
+1. Clone this repository and navigate to the top folder.
+```shell
+git clone git@github.com:MaBody/aldiscore.git
+```
+
+
+### a) Library + CLI 
+
+2. build with python+setuptools and install distribution:
+   ```shell
+   python -m build
+   pip install dist/aldiscore-<version>.whl
+   ```
+### b) Development
+
+2. Use the `environment.yml` file to set up a conda environment:
    ```shell
    conda env create -f environment.yml
-   ```
-3. Activate the new conda environment:
-   ```shell
    conda activate aldiscore
+   pip install -e .
    ```
-4. Install aldiscore locally:
-   ```shell
-   pip install .
-   ```
+
+## Command Line Interface
+
+The `aldiscore` command line tool supports both heuristic scoring and prediction:
+
+
+### Prediction
+```shell
+# Predict difficulty for unaligned sequences
+aldiscore predict path/to/sequences.fasta
+aldiscore predict path/to/alignment.fasta --drop-gaps
+aldiscore predict path/to/sequences.phy --in-format=phylip
+
+```
+
+### Heuristic Scoring
+```shell
+# Compute pairwise scores (d_ssp, d_seq, d_pos, d_phash)
+aldiscore heuristic path/to/ensemble/ --method d_pos
+# Compute a pairwise distance matrix between the sequences
+aldiscore heuristic path/to/ensemble/ --method d_pos --out-type matrix
+
+# Compute set-based scores (conf_set, conf_entropy, conf_displace)
+aldiscore heuristic path/to/ensemble/ --method conf_entropy --out-type scalar
+```
+
+For detailed help:
+```shell
+aldiscore -h
+aldiscore predict -h
+aldiscore heuristic -h
+```
+
+## Python Library
+### Prediction
+```python
+from aldiscore.prediction import DifficultyPredictor
+
+# Initialize predictor with pre-trained model
+predictor = DifficultyPredictor()
+
+# Predict difficulty for sequences
+score = predictor.predict("path/to/sequences.fasta")
+```
+
+### Heuristic Scoring
+```python
+from aldiscore.datastructures import Ensemble
+from aldiscore.scoring import pairwise, set_based
+
+# Load ensemble of alternative alignments
+ensemble = Ensemble.load("path/to/ensemble/")
+
+# Compute pairwise score (d_pos) --> Default
+d_pos = pairwise.DPosDistance().compute(ensemble)
+
+# Compute confusion score (conf_entropy)
+conf_ent = set_based.ConfusionEntropy().compute(ensemble)
+```
+
+We recommend checking out [demo.ipynb](demo/demo.ipynb) for a quick and intuitive overview of the library. The demo notebook requires ipykernel to be installed in the environment:
+
+```shell
+conda install ipykernel
+```
 
 ## Input Data
 
-We build our implementation on top of BioPython data classes (Seq, SeqRecord, MultipleSeqAlignment). For convenience, we implement our own wrapper classes Alignment, Dataset, and Ensemble. We need these wrappers to implement sorting and caching strategies.
+We build our implementation on top of BioPython data classes (Seq, SeqRecord, MultipleSeqAlignment) to support different file types. 
+
+For the heuristics, we use our own wrapper classes Alignment, Dataset, and Ensemble. We need these wrappers to implement sorting and caching strategies.
 
 - `Alignment` contains `Bio.Align.MultipleSeqAlignment`
 - `Dataset` cotains `list[Bio.SeqRecord.SeqRecord]`
 - `Ensemble` contains `list[Alignment]` and `Dataset`
 
-## Scoring
+## Background
+
+### Heuristic Methods
 
 We provide implementations for seven scoring methods that compute the dispersion within an ensemble of alignments.
-The scores can be used as a proxy for the uncertainty/difficulty of the alignment step.
+These scores quantify the uncertainty in the alignment process by analyzing variability between alternative alignments.
 
 | Pairwise                          | Description                                                |
 | --------------------------------- | ---------------------------------------------------------- |
 | $\text{d}_{\text{SSP}}$ [[1]](#1) | Homology set metric. Ignores gaps.                         |
 | $\text{d}_{\text{seq}}$ [[1]](#1) | Homology set metric. Identical coding of gaps in sequence. |
 | $\text{d}_{\text{pos}}$ [[1]](#1) | Homology set metric. Identical coding of consecutive gaps. |
-| pHash [[2]](#2)                   | Perceptual hashing of alignment matrix.                    |
 
 | Set-based                | Description                                               |
 | ------------------------ | --------------------------------------------------------- |
@@ -46,13 +131,19 @@ The scores can be used as a proxy for the uncertainty/difficulty of the alignmen
 
 Our preferred uncertainty quantification method is the pairwise $\text{d}_{\text{pos}}$ score.
 
-## Demo
+### Prediction Model
 
-We recommend checking out [demo.ipynb](demo/demo.ipynb) for a quick and intuitive overview of the provided functionality. The demo notebook requires ipykernel to be installed in the environment:
+The prediction functionality allows estimating alignment difficulty directly from unaligned sequences, without the need to compute alternative alignments. This is achieved through a machine learning model that was trained on over 11,000 MSA datasets of DNA and AA sequences. For the regression quality, we report an RMSE of 0.04.
 
-```shell
-conda install ipykernel
-```
+Key features:
+- Fast prediction without alignment computation
+- Support for both DNA and protein sequences
+
+The prediction pipeline consists of two main components:
+1. Feature extraction (sequence properties, k-mer statistics, etc.)
+2. Model inference using pre-trained LightGBM models
+
+
 
 ## References
 
@@ -60,8 +151,3 @@ conda install ipykernel
 Blackburne, B. P., & Whelan, S. (2012).
 Measuring the distance between multiple sequence alignments.
 Bioinformatics, 28(4), 495-502.
-
-<a id="2">[2]</a>
-Zauner, C. (2010).
-Implementation and benchmarking of perceptual image hash functions.
-PhD Thesis
