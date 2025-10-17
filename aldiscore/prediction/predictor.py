@@ -46,9 +46,9 @@ class DifficultyPredictor:
                   - "latest" to use the most recent version
                   - A version string like "v1.0"
                   - A pre-loaded LightGBM model
-            max_samples: Maximum number of sequence triplets to sample
-                       Controls computation time vs. prediction stability
-            seed: Random seed for reproducible sampling
+            max_samples: Maximum number of sequence triplets to sample.
+                       Controls computation time vs. prediction stability.
+            seed: Random seed for reproducible sampling.
 
         Raises:
             ValueError: If the model file cannot be found or loaded
@@ -114,7 +114,7 @@ class DifficultyPredictor:
         feat_df = FeatureExtractor(
             sequences=_sequences,
             psa_config=self._psa_config,
-            track_perf=True,
+            track_perf=False,
             data_type=in_type,
             seed=self.seed,
         ).compute()
