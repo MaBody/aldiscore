@@ -66,9 +66,9 @@ result_df.to_parquet(out_path)
 best_params = dict(result_df.loc[0, ~result_df.columns.isin(out.columns)])
 final_model = lgb.LGBMRegressor(**best_params)
 
-model.fit(feat_df, labels)
+final_model.fit(feat_df, labels)
 
-predictor = DifficultyPredictor(model.booster_)
+predictor = DifficultyPredictor(final_model.booster_)
 predictor.save("v1.1.txt")
 
 print(out_path)
