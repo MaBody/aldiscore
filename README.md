@@ -70,7 +70,7 @@ aldiscore heuristic -h
 ## Python Library
 ### Prediction
 ```python
-from aldiscore.prediction import DifficultyPredictor
+from aldiscore.prediction.predictor import DifficultyPredictor
 
 # Initialize predictor with pre-trained model
 predictor = DifficultyPredictor()
