@@ -70,7 +70,7 @@ class DifficultyPredictor:
 
     def predict(
         self,
-        sequences: Union[List[SeqRecord], List[str], Path],
+        sequences: Union[str, Path, List[SeqRecord], List[str]],
         in_format: str = "fasta",
         in_type: Literal["DNA", "AA", "auto"] = "auto",
         drop_gaps: bool = True,
@@ -91,13 +91,18 @@ class DifficultyPredictor:
         Raises:
             ValueError: If feature extraction fails
         """
+        _sequences = None
         # ensure correct input format
-        if self._is_path(sequences):
+        if isinstance(sequences, str) or isinstance(sequences, Path):
             _sequences = list(SeqIO.parse(sequences, format=in_format))
-        elif isinstance(sequences[0], str):
-            _sequences = [SeqRecord(Seq(seq)) for seq in sequences]
-        else:  # Assuming type SeqRecord here!
-            _sequences = sequences
+        elif isinstance(sequences, list) and (len(sequences) > 0):
+            if isinstance(sequences[0], str):
+                _sequences = [SeqRecord(Seq(seq)) for seq in sequences]
+            elif isinstance(sequences[0], SeqRecord):
+                _sequences = sequences
+
+        if _sequences is None:
+            raise ValueError(f"Detected wrong input format for parameter 'sequences'")
 
         if drop_gaps:
             records = []
