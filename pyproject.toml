@@ -16,7 +16,6 @@ classifiers = [
 ]
 requires-python = ">= 3.8"
 
-
 dependencies = [
     "numpy",
     "scipy",
@@ -29,21 +28,17 @@ dependencies = [
     "pyyaml",
 ]
 
-
 [project.optional-dependencies]
 misc = [
     "plotly",
     "tqdm"
 ]
 
-
 [project.urls]
 Repository = "https://github.com/MaBody/aldiscore.git"
 
-
 [project.scripts]
 aldiscore = "aldiscore.main:main"
-
 
 [build-system]
 requires = ["setuptools >= 61"]
@@ -72,3 +67,7 @@ exclude = [
     "*.egg",
     "*.egg-info"
 ]
+
+[tool.pixi.workspace]
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]

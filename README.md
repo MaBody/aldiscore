@@ -21,11 +21,12 @@ git clone git@github.com:MaBody/aldiscore.git
 
 ### a) Library + CLI 
 
-2. build with python+setuptools and install distribution:
+2. build with `uv` and install distribution:
    ```shell
-   python -m build
-   pip install dist/aldiscore-<version>.whl
+   uv build
+   uv pip install dist/<VERSION>
    ```
+
 ### b) Development
 
 2. Use the `environment.yml` file to set up a conda environment:
