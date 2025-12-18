@@ -26,14 +26,14 @@ git clone git@github.com:MaBody/aldiscore.git
    python -m build
    pip install dist/aldiscore-<version>.whl
    ```
-### b) Development
+### b) Library on Conda
 
 2. Use the `environment.yml` file to set up a conda environment:
    ```shell
    conda env create -f environment.yml
    conda activate aldiscore
    pip install rich_argparse
-   pip install -e .
+   pip install .
    ```
 
 ## Command Line Interface
