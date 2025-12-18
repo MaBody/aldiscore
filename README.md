@@ -32,6 +32,7 @@ git clone git@github.com:MaBody/aldiscore.git
    ```shell
    conda env create -f environment.yml
    conda activate aldiscore
+   pip install rich_argparse
    pip install -e .
    ```
 
