@@ -10,6 +10,5 @@ dependencies:
 - biopython
 - lightgbm
 - matplotlib
-- rich_argparse
 - parasail
 - pyyaml
