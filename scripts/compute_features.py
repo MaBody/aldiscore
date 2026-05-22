@@ -41,7 +41,9 @@ def process_queue(queue: mp.Queue):
     counter = 0
     perf_dicts = {}
     log_file = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".parquet"
-    log_path = ROOT.parent / "logs" / "perf" / log_file
+    log_path = "/hits/fast/cme/luciamf/msa_difficulty/alignment-project/aldiscore/logs/perf/" + log_file
+    # log_path = ROOT.parent / "logs" / "perf" / log_file
+    
     while True:
         msg = queue.get()  # Read from the queue
         done = msg == _DONE
@@ -73,16 +75,30 @@ def process_queue(queue: mp.Queue):
 
 if __name__ == "__main__":
 
-    data_dir = Path("/hits/fast/cme/bodynems/data/paper")
-    sources = os.listdir(data_dir)
-    sources.remove("treebase_v1")
-    sources = ["treebase_v1"] + sources
+    data_dir = Path("/hits/fast/cme/luciamf/msa_difficulty/alignment-project/paper/") # og_datasets
+    #data_dir = Path("/hits/fast/cme/luciamf/msa_difficulty/pandit/ensembles") # pandit datasets
+    # data_dir = Path("/hits/fast/cme/luciamf/msa_difficulty/new_data/") # new datasets
+    # sources = ["aa", "dna"] # pandit
+    # sources = ["balibase_mdsa_all", "lanfear", "oxbench_mdsa_all", "smart_mdsa_all", "balibase_mdsa_100s", "oxbench_mdsa_100s", "smart_mdsa_100s"]
+    # faltan PREFAB LOL
+    # sources.remove("treebase_v1")
+    # sources = ["treebase_v1"] + sources
+    # sources.remove("bralibase_k5")
+    # sources.remove("bralibase_k7")
+    # sources.remove("bralibase_k15")
+    # sources.remove("bali2dna")
+    # sources.remove("bali2dnaf") # dna datasets
+    sources = ["bali2dna", # dna
+               "treebase_v1", # both
+               "arthropod","formatt_homstrad_renamed","formatt_sabmark_renamed", "prefab4", "bali3", "ox", "sabre"] # aa
+    
     print(f"Computing for sources: {sources}")
 
     print("Detected CPUs:", mp.cpu_count())
-    cpu_counts = [min(100, mp.cpu_count() - 2)] * len(sources)
-    if "treebase_v1" in sources:
-        cpu_counts[sources.index("treebase_v1")] = mp.cpu_count() - 10
+    cpu_counts = [min(100, mp.cpu_count() - 10)] * len(sources)
+    
+    #if "treebase_v1" in sources:
+       # cpu_counts[sources.index("treebase_v1")] = 30 # mp.cpu_count() - 10
 
     manager = mp.Manager()
     queue = manager.Queue() if _TRACK_PERF else None
@@ -105,6 +121,6 @@ if __name__ == "__main__":
         feat_df.index = pd.MultiIndex.from_tuples(
             feats_dict.keys(), names=["source", "dataset"]
         )
-        feat_df.to_parquet(data_dir / source / "features.parquet")
+        feat_df.to_parquet(data_dir / source / "features.parquet", engine="fastparquet")
 
     queue.put(_DONE)

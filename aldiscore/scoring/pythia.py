@@ -20,7 +20,7 @@ def compute_pythia_difficulty(
     except ImportError:
         raise ImportError(
             "To use pythia, you need to install it first."
-            "You can do so with: pip install pythiaphylopredictor"
+            "You can do so with: pip install pythiaphylopredicto"
         )
 
     PYTHIA = pypythia.predictor.DifficultyPredictor()
@@ -45,4 +45,6 @@ def compute_pythia_difficulty(
                 scores.append(PYTHIA.predict(feats)[0])
             except pypythia.custom_errors.RAxMLNGError:
                 scores.append(np.nan)
+    
     return np.array(scores)
+

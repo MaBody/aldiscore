@@ -33,7 +33,7 @@ class DifficultyPredictor:
 
     def __init__(
         self,
-        model: Union["lgb.Booster", Literal["latest", "vX.Y"], Path] = "latest",
+        model: Union["lgb.Booster", Literal["aa", "dna", "vX.Y"], Path] = None,
         max_samples: int = 100,
         seed: int = 0,
     ):
@@ -57,8 +57,10 @@ class DifficultyPredictor:
             self.model: "lgb.Booster" = lgb.Booster(model_file=Path(model))
         elif isinstance(model, str):
             file_name = model
-            if model == "latest":
-                file_name = get_from_config("models", "latest")
+            if model == "aa":
+                file_name = get_from_config("models", "aa")
+            if model == "dna":
+                file_name = get_from_config("models", "dna")
             file_name += ".txt"
             model_path = ROOT / "models" / file_name
             self.model: "lgb.Booster" = lgb.Booster(model_file=model_path)

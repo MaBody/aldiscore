@@ -212,6 +212,8 @@ def main():
             )
         ),
     )
+    
+
 
     # Prediction
     predict_parser = subparsers.add_parser(
@@ -246,13 +248,13 @@ def main():
         "--max-samples",
         type=int,
         default=100,
-        help="Upper bound on number of sequence triplets sampled for transitive consistency features. Trade-off between variance and compute. Defaults to 333.",
+        help="Upper bound on number of sequence triplets sampled for transitive consistency features. Trade-off between variance and compute. Defaults to 100.",
     )
     predict_parser.add_argument(
         "--model",
         type=str,
-        default="latest",
-        help="Indicates the pretrained model version. Either 'latest' or following the format 'vX.Y'.",
+        default=None,
+        help="Indicates the pretrained model version. Following the format 'vX.Y'.",
     )
     predict_parser.add_argument(
         "--seed",
@@ -261,6 +263,9 @@ def main():
         help="Seed used for sampling in randomized features. Defaults to 0.",
     )
     args = parser.parse_args()
+    if args.model is None:
+        args.model = "dna" if args.in_type == "DNA" else "aa"
+
     out = None
     try:
         if args.command == "heuristic":
@@ -286,6 +291,8 @@ def main():
         sys.stderr.write(traceback.format_exc())
         sys.exit(1)
     else:
+        if out < 0:
+            out = 0  # for predicted scores, clip negative values to 0
         sys.stdout.write(str(out))
         sys.stdout.flush()
         sys.stderr.write("\n")

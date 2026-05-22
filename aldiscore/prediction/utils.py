@@ -10,8 +10,40 @@ from pathlib import Path
 import os
 import pandas as pd
 from aldiscore import RSTATE
+from sklearn.model_selection import StratifiedKFold
 
+class RepeatedStratifiedKFoldReg:
+    def __init__(self, n_splits=10, n_repeats=10, n_bins=5, random_state=0):
+        self.n_splits = n_splits
+        self.n_repeats = n_repeats
+        self.n_bins = n_bins
+        self.random_state = random_state
 
+    def _make_bins(self, y):
+        # quantile-based binning for stratification, with automatic handling of duplicate edges
+        return pd.qcut(
+            pd.Series(y),
+            q=self.n_bins,
+            labels=False,
+            duplicates="drop"
+        )
+
+    def split(self, X, y):
+        y = np.asarray(y)
+
+        for repeat in range(self.n_repeats):
+            # stratification bins (important for regression skew)
+            y_binned = self._make_bins(y)
+
+            skf = StratifiedKFold(
+                n_splits=self.n_splits,
+                shuffle=True,
+                random_state=None if self.random_state is None else self.random_state + repeat
+            )
+
+            for train_idx, test_idx in skf.split(X, y_binned):
+                yield train_idx, test_idx
+            
 def sample_index_tuples(n: int, r: int, k: int, seed: int):
     """
     Sample k r-tuples from range(n) without replacement.
@@ -200,6 +232,7 @@ def load_features(
     label_scale: Optional[float] = "auto",
     exclude_features: list = None,
     include_features: list = None,
+    data_type: str = "none",
     drop_na: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
     """
@@ -237,8 +270,8 @@ def load_features(
     feat_dfs = []
     label_dfs = []
     for source in sources:
-        feat_df = pd.read_parquet(data_dir / source / "features.parquet")
-        label_df = pd.read_parquet(data_dir / source / "stats.parquet")
+        feat_df = pd.read_parquet(data_dir / source / "features.parquet", engine="fastparquet")
+        label_df = pd.read_parquet(data_dir / source / "stats.parquet", engine="fastparquet")
         label_df = label_df[["mean"]].query("method == 'dpos'").droplevel(2)
         feat_dfs.append(feat_df)
         label_dfs.append(label_df)
@@ -252,6 +285,15 @@ def load_features(
     else:
         label_df = (label_df * label_scale).clip(upper=1)
 
+    
+    # drop dna datasets
+    if data_type == "DNA":
+        feat_df = feat_df[feat_df['is_dna'] == True]
+    elif data_type == "AA":
+        feat_df = feat_df[feat_df['is_dna'] == False]
+    else:
+        feat_df = feat_df
+        
     cols = feat_df.columns
     if exclude_features:
         mask = np.full(len(cols), True)
@@ -266,6 +308,9 @@ def load_features(
 
     drop_df = feat_df.drop(cols, axis=1).copy()
     feat_df = feat_df[cols]
+    
+  
+    
 
     # Left or Right Join if rows have been removed
     if len(label_df) > len(feat_df):
