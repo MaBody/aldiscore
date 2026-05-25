@@ -249,7 +249,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         default_config["MAX_PSA_COUNT"] = psa_config.get("MAX_PSA_COUNT", 1000)
         default_config["GROUP_SIZE"] = psa_config.get("GROUP_SIZE", 3)
 
-        default_config["DNA"] = {"op": 5, "ep": 2, "matrix": parasail.dnafull}
+        default_config["DNA"] = {"op": 10, "ep": 1, "matrix": parasail.dnafull}
         default_config["AA"] = {"op": 10, "ep": 1, "matrix": parasail.blosum62}
 
         default_config["DNA"].update(psa_config.get("DNA", {}))
@@ -585,6 +585,9 @@ class FeatureExtractor(BaseFeatureExtractor):
         feat_dict = {}
         seqs = self._get_cached(self._SEQ_ORD)
         for k in Ks:
+            if all(len(seq) < k for seq in seqs):
+                print(f"Skipping k={k} for all sequences with length < {k}")
+                continue
             count_table = defaultdict(
                 partial(np.zeros, shape=len(self._sequences), dtype=np.int32)
             )

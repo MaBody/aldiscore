@@ -1,5 +1,6 @@
 models:
-  latest: v1.0
+  aa: v1.0_aa
+  dna: v1.0_dna
 
 tools:
   # ent: path/to/ent/binary

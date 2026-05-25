@@ -2,15 +2,9 @@
 
 AlDiScore provides two approaches for quantifying multiple sequence alignment (MSA) difficulty:
 
-1. **Heuristic Scoring**: Compute dispersion within an ensemble of alternative alignments
-2. **Predictive Scoring**: Predict alignment difficulty from unaligned sequences using ML
 
-## Features
-
-- Command-line interface for heuristics and prediction
-- Multiple scoring methods for ensemble analysis
-- Pre-trained models for difficulty prediction
-- Supports DNA and amino acid sequences
+1. **Predictive Scoring**: Predict alignment difficulty from unaligned sequences using ML. Supports both nucleotides and amino-acids sequences. 
+2. **Heuristic Scoring**: Compute dispersion within an ensemble of alternative alignments. Requires the pre-computed MSA ensemble. 
 
 ## Setup 
 1. Clone this repository and navigate to the top folder.
@@ -44,13 +38,17 @@ The `aldiscore` command line tool supports both heuristic scoring and prediction
 ### Prediction
 ```shell
 # Predict difficulty for unaligned sequences
-aldiscore predict path/to/sequences.fasta
-aldiscore predict path/to/alignment.fasta --drop-gaps
+aldiscore predict path/to/sequences.fasta --datatype AA
+aldiscore predict path/to/alignment.fasta --drop-gaps # when the input is aligned sequences
 aldiscore predict path/to/sequences.phy --in-format=phylip
 
 ```
+Note that it detects by default the datatype (AA or DNA) but you can also specify it manually.
 
 ### Heuristic Scoring
+
+Note that our Prediction models are trained with d_pos pairwise score. 
+
 ```shell
 # Compute pairwise scores (d_ssp, d_seq, d_pos, d_phash)
 aldiscore heuristic path/to/ensemble/ --method d_pos
@@ -134,7 +132,7 @@ Our preferred uncertainty quantification method is the pairwise $\text{d}_{\text
 
 ### Prediction Model
 
-The prediction functionality allows estimating alignment difficulty directly from unaligned sequences, without the need to compute alternative alignments. This is achieved through a machine learning model that was trained on over 11,000 MSA datasets of DNA and AA sequences. For the labels, we used the d_pos metric on a diverse ensemble of 48 alignments. Regarding model performance, we report an RMSE of 0.04.
+The prediction functionality allows estimating alignment difficulty directly from unaligned sequences, without the need to compute alternative alignments. This is achieved through a machine learning model that was trained on over 9,000 MSA datasets of DNA (5800) and AA (3851) sequences sets. For the labels, we used the d_pos metric on a diverse ensemble of 48 alignments. Regarding model performance, we report an R^2=0.885 in amino-acid sequences and R^2=0.836 in nucleotide sequences.
 
 Key features:
 - Fast prediction without alignment computation

@@ -9,25 +9,28 @@ from sklearn.model_selection import RepeatedKFold
 from aldiscore.prediction.predictor import DifficultyPredictor
 import psutil
 
-data_dir = Path("/hits/fast/cme/bodynems/data/paper")
+data_dir = Path("/hits/fast/cme/luciamf/msa_difficulty/alignment-project/paper")
 # Load features, excluding auxiliary/deprecated
 feat_df, drop_df, labels = utils.load_features(
     data_dir,
     exclude_features=["is_dna", "num_seqs", "seq_length", "10-mer_js", "13-mer_js"],
+    include_sources=["arthropod","formatt_homstrad_renamed","formatt_sabmark_renamed", "prefab4", "treebase_v1","bali3", "ox", "sabre"],# aa datasets
+    # exclude_sources=["bralibase_k5", "bralibase_k7", "bralibase_k15", "bali2dna", "bali2dnaf"], # dna datasets
+    data_type="AA",
 )
 
-
 metric_names = ["RMSE", "MAE", "R^2", "CORR"]
-report_path = ROOT.parent / "logs" / "reporting" / f"report_884441.parquet"
+report_path =  "/hits/fast/cme/luciamf/msa_difficulty/alignment-project/aldiscore/logs/reporting/report_v1.0_aa.parquet"
 
 # Load performance report data
 report_df = pd.read_parquet(report_path)
 best_params = dict(report_df.loc[0, ~report_df.columns.isin(metric_names)])
 print(best_params)
 
+print(feat_df)
 # Train and save final model
 final_model = lgb.LGBMRegressor(**best_params)
 final_model.fit(feat_df, labels)
 
 predictor = DifficultyPredictor(final_model.booster_)
-predictor.save("v1.1.txt")
+predictor.save("/hits/fast/cme/luciamf/msa_difficulty/alignment-project/aldiscore/aldiscore/models/v1.0_aa.txt")
