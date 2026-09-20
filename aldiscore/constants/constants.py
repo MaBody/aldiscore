@@ -5,6 +5,9 @@ STAT_SEP = "."
 
 DNA_CHARS = np.array(list("ACGT"))
 AA_CHARS = np.array(list("ACDEFGHIKLMNPQRSTVWY"))
+# Canonical alphabets extended by IUPAC ambiguity codes (and U for RNA / selenocysteine).
+DNA_CHARS_EXT = np.concatenate((DNA_CHARS, list("URYKMSWBDHVN")))
+AA_CHARS_EXT = np.concatenate((AA_CHARS, list("BZXJUO")))
 
 GAP_CHAR = "-"
 GAP_CODE = -1

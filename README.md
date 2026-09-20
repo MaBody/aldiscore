@@ -123,8 +123,10 @@ We build our implementation on top of BioPython data classes (Seq, SeqRecord, Mu
 For the heuristics, we use our own wrapper classes Alignment, Dataset, and Ensemble. We need these wrappers to implement sorting and caching strategies.
 
 - `Alignment` contains `Bio.Align.MultipleSeqAlignment`
-- `Dataset` cotains `list[Bio.SeqRecord.SeqRecord]`
+- `Dataset` contains `list[Bio.SeqRecord.SeqRecord]`
 - `Ensemble` contains `list[Alignment]` and `Dataset`
+
+Prediction input is validated against the IUPAC DNA/protein alphabets. Ambiguity codes are allowed. `*` is rejected, `-` and `.` are treated as gaps and removed.
 
 ## Background
 

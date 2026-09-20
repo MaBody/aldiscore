@@ -8,7 +8,13 @@ import itertools as it
 from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
-from aldiscore.constants.constants import GAP_CHAR, GAP_CODE, STAT_SEP
+from aldiscore.constants.constants import (
+    GAP_CHAR,
+    GAP_CODE,
+    STAT_SEP,
+    DNA_CHARS_EXT,
+    AA_CHARS_EXT,
+)
 import aldiscore.prediction.utils as utils
 import traceback
 import tempfile
@@ -181,11 +187,11 @@ class FeatureExtractor(BaseFeatureExtractor):
         """
         super().__init__(sequences, track_perf)
 
-        self._validate_inputs(validate)
+        if data_type == "auto":
+            data_type = str(infer_data_type(self._sequences))
+        self._cache[self._DTYPE] = data_type
 
-        # If data_type == "auto", infer data_type in _init_basics
-        if data_type != "auto":
-            self._cache[self._DTYPE] = data_type
+        self._validate_inputs(validate)
 
         self._psa_config = self._init_psa_config(psa_config)
 
@@ -202,6 +208,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         Checks:
         1. At least 3 sequences are provided (required for transitive consistency)
         2. All sequences have length > 1
+        3. All characters are in the IUPAC alphabet of the data type (gaps allowed)
 
         Args:
             validate: How to handle validation failures
@@ -222,6 +229,27 @@ class FeatureExtractor(BaseFeatureExtractor):
         k = min(len(seq) for seq in self._sequences)
         if k <= 1:
             msg = f"WARNING: Found sequence with length {k}"
+            if validate == "error":
+                raise ValueError(msg)
+            else:
+                print(msg)
+
+        data_type = self._cache[self._DTYPE]
+        alphabet = DNA_CHARS_EXT if data_type == "DNA" else AA_CHARS_EXT
+        allowed = set(alphabet) | {GAP_CHAR}
+        invalid_chars = set()
+        invalid_ids = []
+        for seq in self._sequences:
+            extra = set(str(seq.seq).upper()) - allowed
+            if extra:
+                invalid_chars |= extra
+                invalid_ids.append(seq.id)
+        if invalid_chars:
+            msg = (
+                f"WARNING: Invalid characters for {data_type} data: "
+                f"{sorted(invalid_chars)} in sequences {invalid_ids[:5]}"
+                + (f" (+{len(invalid_ids) - 5} more)" if len(invalid_ids) > 5 else "")
+            )
             if validate == "error":
                 raise ValueError(msg)
             else:
@@ -264,9 +292,6 @@ class FeatureExtractor(BaseFeatureExtractor):
     @_feature
     # _init_cache needs to be called as a feature to support performance logs
     def _init_basics(self) -> dict:
-        if not self._DTYPE in self._cache:
-            self._cache[self._DTYPE] = str(infer_data_type(self._sequences))
-
         self._cache[self._SEQ_ORD] = [
             list(map(ord, str(seq_record.seq).upper()))
             for seq_record in self._sequences

@@ -89,7 +89,8 @@ class DifficultyPredictor:
                   Higher values indicate sequences that are harder to align
 
         Raises:
-            ValueError: If feature extraction fails
+            ValueError: If feature extraction fails, or if sequences contain characters
+                outside the IUPAC DNA/protein alphabet. The codon `*` is rejected. Gap chars `-` and `.` are removed.
         """
         _sequences = None
         # ensure correct input format
@@ -105,7 +106,10 @@ class DifficultyPredictor:
             raise ValueError(f"Detected wrong input format for parameter 'sequences'")
 
         _sequences = [
-            SeqRecord(Seq(str(seq.seq).replace(GAP_CHAR, "")), id=seq.id)
+            SeqRecord(
+                Seq(str(seq.seq).upper().replace(".", GAP_CHAR).replace(GAP_CHAR, "")),
+                id=seq.id,
+            )
             for seq in _sequences
         ]
 
