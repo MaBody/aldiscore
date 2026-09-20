@@ -1,7 +1,7 @@
 import pathlib
 import subprocess
 import tempfile
-from typing import List, Optional, Dict
+from typing import List, Optional
 import itertools
 import numpy as np
 from numpy import typing as npt

@@ -5,7 +5,6 @@ from typing import List, Literal, Union, Tuple, Dict, Any
 from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
-from aldiscore import get_from_config
 from aldiscore.enums.enums import StringEnum
 from aldiscore.datastructures.utils import infer_data_type
 from aldiscore.constants.constants import (
@@ -17,8 +16,6 @@ from aldiscore.constants.constants import (
 )
 import aldiscore.prediction.utils as utils
 import traceback
-import tempfile
-import subprocess
 from collections import defaultdict
 from time import perf_counter
 import parasail
@@ -470,38 +467,6 @@ class FeatureExtractor(BaseFeatureExtractor):
             js = utils.js_divergence(dist, axis=1)
             feat_dict.update(self.descriptive_statistics(js, name + "_" + tag))
         return feat_dict
-
-    # @_feature
-    # def _ent_randomness(self) ->Dict[str, float]:
-    #     name = "frst"
-    #     ent_path = get_from_config("tools", "ent")
-    #     feats = defaultdict(list)
-    #     with tempfile.NamedTemporaryFile() as tmpfile:
-    #         for seq in self._sequences:
-    #             with open(tmpfile.name, "wb") as file:
-    #                 file.write(str(seq.seq).encode("utf-8"))
-    #             cmd = [ent_path, "-t", tmpfile.name]
-    #             out = subprocess.run(cmd, capture_output=True).stdout.decode("utf-8")
-    #             lines = [line.split(",") for line in out.splitlines()]
-    #             keys = [name + "_" + key.strip().lower() for key in lines[0]]
-    #             # Drop first position (csv index)
-    #             for key, val in zip(keys[1:], lines[1][1:]):
-    #                 if key.endswith("monte-carlo-pi"):
-    #                     continue
-    #                 elif key.endswith("chi-square"):
-    #                     # Correlates almost perfectly with seq_length
-    #                     eps = 1  # Instability only with unrealistically short sequences
-    #                     key = name + "_" + "inv-chi-square"
-    #                     val = len(seq) / (float(val.strip()) + eps)
-    #                 else:
-    #                     val = float(val.strip())
-    #                 feats[key].append(val)
-
-    #     del feats[name + "_file-bytes"]  # Redundant, same as sequence length
-    #     feat_dict = {}
-    #     for key, feat in feats.items():
-    #         feat_dict.update(self.descriptive_statistics(feat, key))
-    #     return feat_dict
 
     @_feature
     def _transitive_consistency(self) -> Dict[str, float]:
