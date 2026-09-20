@@ -63,7 +63,7 @@ def sample_index_tuples(n: int, r: int, k: int, seed: int):
         Uses rejection sampling - generates more tuples than needed
         and filters out those with duplicate indices.
     """
-    samples = set()
+    samples = {}
     max_comb = math.comb(n, r)
     limit = np.minimum(max_comb, k)
     # prioritize_new = n < limit # TODO: implement or remove
@@ -81,7 +81,7 @@ def sample_index_tuples(n: int, r: int, k: int, seed: int):
         samples_new = samples_new[diff_mask].tolist()
         # print(samples_new)
         samples_new = list(map(lambda tup: tuple(sorted(tup)), samples_new))
-        samples.update(samples_new)
+        samples.update(dict.fromkeys(samples_new))
 
         if len(samples) >= limit:
             break
