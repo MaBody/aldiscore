@@ -33,7 +33,7 @@ class DifficultyPredictor:
 
     def __init__(
         self,
-        model: Union["lgb.Booster", Literal["aa", "dna", "vX.Y"], Path] = None,
+        model: Union["lgb.Booster", Literal["aa", "dna", "vX.Y"], Path],
         max_samples: int = 100,
         seed: int = 0,
     ):

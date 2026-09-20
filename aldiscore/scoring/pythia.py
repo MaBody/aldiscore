@@ -19,8 +19,8 @@ def compute_pythia_difficulty(
         import pypythia.msa
     except ImportError:
         raise ImportError(
-            "To use pythia, you need to install it first."
-            "You can do so with: pip install pythiaphylopredicto"
+            "To use pythia, you need to install it first. "
+            "You can do so with: pip install 'aldiscore[pythia]'"
         )
 
     PYTHIA = pypythia.predictor.DifficultyPredictor()

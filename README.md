@@ -6,29 +6,46 @@ AlDiScore provides two approaches for quantifying multiple sequence alignment (M
 1. **Predictive Scoring**: Predict alignment difficulty from unaligned sequences using ML. Supports both nucleotides and amino-acids sequences. 
 2. **Heuristic Scoring**: Compute dispersion within an ensemble of alternative alignments. Requires the pre-computed MSA ensemble. 
 
-## Setup 
-1. Clone this repository and navigate to the top folder.
+## Setup
+
+Clone this repository and navigate to the top folder:
 ```shell
 git clone git@github.com:MaBody/aldiscore.git
+cd aldiscore
 ```
 
+Then pick one of the two supported setups.
 
-### a) Library + CLI 
+### a) uv (PyPI)
 
-2. build with python+setuptools and install distribution:
-   ```shell
-   python -m build
-   pip install dist/aldiscore-<version>.whl
-   ```
-### b) Library on Conda
+```shell
+uv sync
+uv run aldiscore -h
+```
 
-2. Use the `environment.yml` file to set up a conda environment:
-   ```shell
-   conda env create -f environment.yml
-   conda activate aldiscore
-   pip install rich_argparse
-   pip install .
-   ```
+`uv sync` creates `.venv` with the locked dependencies from `uv.lock` and installs `aldiscore` in editable mode. Optional extras: `uv sync --extra pythia`, `--extra train`, `--extra demo`.
+
+> **macOS:** `parasail` has no arm64 wheel on PyPI, so `uv sync` compiles it from source, and the `lightgbm` wheel needs OpenMP at runtime. Either install these first (`brew install autoconf automake libtool libomp`) or use the pixi setup below, which ships prebuilt binaries.
+
+### b) pixi (conda-forge / bioconda)
+
+```shell
+pixi install
+pixi run aldiscore -h
+```
+
+Compiled dependencies (`parasail`, `lightgbm`) come prebuilt from conda. Additional environments:
+
+```shell
+pixi install -e pythia   # adds pythiaphylopredictor + raxml-ng
+pixi install -e demo     # adds ipykernel for the demo notebook
+```
+
+### Tests
+
+```shell
+uv run pytest    # or: pixi run test
+```
 
 ## Command Line Interface
 
@@ -71,8 +88,8 @@ aldiscore heuristic -h
 ```python
 from aldiscore.prediction.predictor import DifficultyPredictor
 
-# Initialize predictor with pre-trained model
-predictor = DifficultyPredictor()
+# Initialize predictor with a pre-trained model ("aa" or "dna")
+predictor = DifficultyPredictor(model="aa")
 
 # Predict difficulty for sequences
 score = predictor.predict("path/to/sequences.fasta")
@@ -93,10 +110,10 @@ d_pos = pairwise.DPosDistance().compute(ensemble)
 conf_ent = set_based.ConfusionEntropy().compute(ensemble)
 ```
 
-We recommend checking out [demo.ipynb](demo/demo.ipynb) for a quick and intuitive overview of the library. The demo notebook requires ipykernel to be installed in the environment:
+We recommend checking out [demo.ipynb](demo/demo.ipynb) for a quick and intuitive overview of the library. The demo notebook requires ipykernel in the environment:
 
 ```shell
-conda install ipykernel
+uv sync --extra demo    # or: pixi install -e demo
 ```
 
 ## Input Data

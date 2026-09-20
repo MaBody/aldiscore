@@ -7,15 +7,13 @@ authors = [{name = "Mattis Bodynek", email = "mattisbodynek@gmail.com"}]
 version = "1.0.0"
 license = "GPL-3.0-or-later"
 classifiers = [
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13"
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
-requires-python = ">= 3.8"
-
+requires-python = ">=3.10"
 
 dependencies = [
     "numpy",
@@ -23,30 +21,30 @@ dependencies = [
     "pandas",
     "biopython",
     "lightgbm",
-    "matplotlib",
+    "scikit-learn",
+    "tqdm",
+    "rich",
     "rich_argparse",
     "parasail",
     "pyyaml",
 ]
 
-
 [project.optional-dependencies]
-misc = [
-    "plotly",
-    "tqdm"
-]
-
+pythia = ["pythiaphylopredictor"]
+train = ["optuna", "psutil"]
+demo = ["ipykernel"]
 
 [project.urls]
 Repository = "https://github.com/MaBody/aldiscore.git"
 
-
 [project.scripts]
 aldiscore = "aldiscore.main:main"
 
+[dependency-groups]
+dev = ["pytest"]
 
 [build-system]
-requires = ["setuptools >= 61"]
+requires = ["setuptools >= 77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -58,7 +56,7 @@ where = ["."]
 include = ["aldiscore*"]
 exclude = [
     "scripts*",
-    "tests*", 
+    "tests*",
     "notebooks*",
     "demo*",
     "figures*",
@@ -70,5 +68,44 @@ exclude = [
     "*.pyd",
     "*.so",
     "*.egg",
-    "*.egg-info"
+    "*.egg-info",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+# Prebuilt binaries from conda; the PyPI versions compile C / need libomp on macOS.
+parasail-python = "*"
+lightgbm = "*"
+
+[tool.pixi.pypi-dependencies]
+aldiscore = { path = ".", editable = true }
+
+[tool.pixi.feature.test.dependencies]
+pytest = "*"
+
+[tool.pixi.feature.test.tasks]
+test = "pytest"
+
+[tool.pixi.feature.pythia.dependencies]
+raxml-ng = "*"
+# pythiaphylopredictor -> shap -> numba/llvmlite: prebuilt from conda to avoid PyPI source builds.
+shap = "*"
+numba = "*"
+
+[tool.pixi.feature.pythia.pypi-dependencies]
+aldiscore = { path = ".", editable = true, extras = ["pythia"] }
+
+[tool.pixi.feature.demo.pypi-dependencies]
+aldiscore = { path = ".", editable = true, extras = ["demo"] }
+
+[tool.pixi.environments]
+default = { features = ["test"] }
+pythia = { features = ["test", "pythia"] }
+demo = { features = ["test", "demo"] }
