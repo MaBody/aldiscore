@@ -75,7 +75,6 @@ class DifficultyPredictor:
         sequences: Union[str, Path, List[SeqRecord], List[str]],
         in_format: str = "fasta",
         in_type: Literal["DNA", "AA", "auto"] = "auto",
-        drop_gaps: bool = True,
     ) -> float:
         """
         Predict alignment difficulty for a set of sequences.
@@ -84,7 +83,6 @@ class DifficultyPredictor:
             sequences: Input sequences, either a path or BioPython objects.
             in_format: File format if sequences is a Path (e.g., "fasta")
             in_type: Type of sequences - "DNA", "AA" or "auto" for detection
-            drop_gaps: Whether to remove gaps from input sequences. Convenient if input file is aligned.
 
         Returns:
             float: Predicted difficulty score
@@ -106,12 +104,10 @@ class DifficultyPredictor:
         if _sequences is None:
             raise ValueError(f"Detected wrong input format for parameter 'sequences'")
 
-        if drop_gaps:
-            records = []
-            for seq in _sequences:
-                gapless = SeqRecord(Seq(str(seq.seq).replace(GAP_CHAR, "")), id=seq.id)
-                records.append(gapless)
-            _sequences = records
+        _sequences = [
+            SeqRecord(Seq(str(seq.seq).replace(GAP_CHAR, "")), id=seq.id)
+            for seq in _sequences
+        ]
 
         # Initialize PSA config dict with max number of triplets/pairs
         max_psa_count = self._max_samples * self._GROUP_SIZE

@@ -55,8 +55,8 @@ The `aldiscore` command line tool supports both heuristic scoring and prediction
 ### Prediction
 ```shell
 # Predict difficulty for unaligned sequences
-aldiscore predict path/to/sequences.fasta --datatype AA
-aldiscore predict path/to/alignment.fasta --drop-gaps # when the input is aligned sequences
+aldiscore predict path/to/sequences.fasta --in-type AA
+aldiscore predict path/to/alignment.fasta # aligned input works too, gaps are removed
 aldiscore predict path/to/sequences.phy --in-format=phylip
 
 ```

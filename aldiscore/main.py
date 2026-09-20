@@ -12,7 +12,7 @@ Usage:
         aldiscore heuristic <in-dir> [--method] [--out-format] [--in-format]
 
     Prediction mode:
-        aldiscore predict <in-path> [--model] [--seed] [--max-samples] [--in-format] [--in-type] [--drop-gaps]
+        aldiscore predict <in-path> [--model] [--seed] [--max-samples] [--in-format] [--in-type]
 """
 
 import argparse
@@ -107,13 +107,12 @@ def handle_heuristic_mode(in_dir, in_format, method, out_format):
 
 
 def handle_predict_mode(
-    in_path, drop_gaps, in_format, in_type, max_samples, model, seed
+    in_path, in_format, in_type, max_samples, model, seed
 ):
     """
     Handles prediction mode for predicting alignment difficulty.
 
     :param in_path: Path to the sequence file.
-    :param drop_gaps: Indicates whether gaps must be dropped from the sequences.
     :param in_format: File format of the sequences.
     :param in_type: Input data type (DNA, AA, auto).
     :param max_samples: Upper bound on number of sequence triplets.
@@ -127,7 +126,6 @@ def handle_predict_mode(
         sequences=in_path,
         in_format=in_format,
         in_type=in_type,
-        drop_gaps=drop_gaps,
     )
 
 
@@ -224,13 +222,7 @@ def main():
     predict_parser.add_argument(
         "in-path",
         type=pathlib.Path,
-        help="Path to file containing multiple (unaligned) sequences.",
-    )
-    predict_parser.add_argument(
-        "--drop-gaps",
-        action="store_true",
-        dest="drop_gaps",
-        help="If set, gaps in the input sequences are dropped (set this flag for aligned input data).",
+        help="Path to file containing multiple sequences. Gaps are always removed, so aligned input is accepted.",
     )
     predict_parser.add_argument(
         "--in-format",
@@ -278,7 +270,6 @@ def main():
         elif args.command == "predict":
             out = handle_predict_mode(
                 in_path=getattr(args, "in-path"),
-                drop_gaps=args.drop_gaps,
                 in_format=args.in_format,
                 in_type=args.in_type,
                 max_samples=args.max_samples,

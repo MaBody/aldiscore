@@ -4,7 +4,7 @@ import sys
 
 def test_predict_cli(demo_fasta):
     result = subprocess.run(
-        [sys.executable, "-m", "aldiscore.main", "predict", str(demo_fasta), "--drop-gaps"],
+        [sys.executable, "-m", "aldiscore.main", "predict", str(demo_fasta)],
         capture_output=True,
         text=True,
     )
