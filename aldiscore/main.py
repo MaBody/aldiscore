@@ -234,6 +234,7 @@ def main():
         "--in-type",
         type=str,
         default="auto",
+        choices=["auto", "DNA", "AA"],
         help="Input data type. Choose from {'auto', 'DNA', 'AA'}. If set to 'auto', we use a heuristic to infer. Defaults to 'auto'.",
     )
     predict_parser.add_argument(

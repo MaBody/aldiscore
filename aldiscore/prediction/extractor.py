@@ -183,15 +183,16 @@ class FeatureExtractor(BaseFeatureExtractor):
             seed: Random seed for reproducible sampling
 
         Raises:
-            ValueError: If validation fails and validate="error"
+            ValueError: If validation fails and validate="error", or if data_type
+                is not one of "DNA", "AA", "auto"
         """
         super().__init__(sequences, track_perf)
 
-        if data_type == "auto":
-            data_type = str(infer_data_type(self._sequences))
-        self._cache[self._DTYPE] = data_type
+        self._validate = validate
 
-        self._validate_inputs(validate)
+        self._check_structure()
+        self._cache[self._DTYPE] = self._resolve_data_type(data_type)
+        self._check_alphabet()
 
         self._psa_config = self._init_psa_config(psa_config)
 
@@ -201,39 +202,45 @@ class FeatureExtractor(BaseFeatureExtractor):
     # --------------- INIT HELPERS -----------------
     # ----------------------------------------------
 
-    def _validate_inputs(self, validate: Literal["warn", "error"]):
+    def _report(self, msg: str):
+        """Apply the validation policy: raise on "error", print on "warn"."""
+        if self._validate == "error":
+            raise ValueError(msg)
+        print("WARNING: " + msg)
+
+    def _check_structure(self):
         """
-        Validate input sequences.
-
-        Checks:
-        1. At least 3 sequences are provided (required for transitive consistency)
-        2. All sequences have length > 1
-        3. All characters are in the IUPAC alphabet of the data type (gaps allowed)
-
-        Args:
-            validate: How to handle validation failures
-                     "warn": Print warning message
-                     "error": Raise ValueError
-
-        Raises:
-            ValueError: If validation fails and validate="error"
+        Check that at least 3 sequences are provided (required for transitive
+        consistency) and that every sequence has length > 1.
         """
         n = len(self._sequences)
         if n <= 2:
-            msg = f"WARNING: Need at least 3 sequences, found {n}"
-            if validate == "error":
-                raise ValueError(msg)
-            else:
-                print(msg)
+            self._report(f"Need at least 3 sequences, found {n}")
 
-        k = min(len(seq) for seq in self._sequences)
+        k = min((len(seq) for seq in self._sequences), default=0)
         if k <= 1:
-            msg = f"WARNING: Found sequence with length {k}"
-            if validate == "error":
-                raise ValueError(msg)
-            else:
-                print(msg)
+            self._report(f"Found sequence with length {k}")
 
+    def _resolve_data_type(self, data_type: str) -> str:
+        """
+        Normalise the data type to "DNA" or "AA", inferring it for "auto".
+        An unknown value is a caller error and always raises, regardless of
+        the validation policy.
+        """
+        data_type = data_type.upper()
+        if data_type == "AUTO":
+            data_type = str(infer_data_type(self._sequences))
+        if data_type not in ("DNA", "AA"):
+            raise ValueError(
+                f"Unknown data_type {data_type!r}; expected 'DNA', 'AA' or 'auto'"
+            )
+        return data_type
+
+    def _check_alphabet(self):
+        """
+        Check that all characters are in the IUPAC alphabet of the data type
+        (gaps allowed).
+        """
         data_type = self._cache[self._DTYPE]
         alphabet = DNA_CHARS_EXT if data_type == "DNA" else AA_CHARS_EXT
         allowed = set(alphabet) | {GAP_CHAR}
@@ -245,15 +252,11 @@ class FeatureExtractor(BaseFeatureExtractor):
                 invalid_chars |= extra
                 invalid_ids.append(seq.id)
         if invalid_chars:
-            msg = (
-                f"WARNING: Invalid characters for {data_type} data: "
+            self._report(
+                f"Invalid characters for {data_type} data: "
                 f"{sorted(invalid_chars)} in sequences {invalid_ids[:5]}"
                 + (f" (+{len(invalid_ids) - 5} more)" if len(invalid_ids) > 5 else "")
             )
-            if validate == "error":
-                raise ValueError(msg)
-            else:
-                print(msg)
 
     def _init_psa_config(self, psa_config: dict) -> Dict[str, Any]:
         """
