@@ -198,6 +198,11 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         self._seed = seed
 
+    @property
+    def data_type(self) -> str:
+        """Resolved data type of the sequences, either "DNA" or "AA"."""
+        return self._cache[self._DTYPE]
+
     # ----------------------------------------------
     # --------------- INIT HELPERS -----------------
     # ----------------------------------------------

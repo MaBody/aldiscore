@@ -247,7 +247,7 @@ def main():
         "--model",
         type=str,
         default=None,
-        help="Indicates the pretrained model version. Following the format 'vX.Y'.",
+        help="Indicates the pretrained model version. Following the format 'vX.Y'. Defaults to the latest model for the (inferred) input data type.",
     )
     predict_parser.add_argument(
         "--seed",
@@ -256,8 +256,6 @@ def main():
         help="Seed used for sampling in randomized features. Defaults to 0.",
     )
     args = parser.parse_args()
-    if args.model is None:
-        args.model = "dna" if args.in_type == "DNA" else "aa"
 
     out = None
     try:

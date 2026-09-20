@@ -33,7 +33,7 @@ class DifficultyPredictor:
 
     def __init__(
         self,
-        model: Union["lgb.Booster", Literal["aa", "dna", "vX.Y"], Path],
+        model: Union["lgb.Booster", Literal["aa", "dna", "vX.Y"], Path, None] = None,
         max_samples: int = 100,
         seed: int = 0,
     ):
@@ -42,9 +42,10 @@ class DifficultyPredictor:
 
         Args:
             model: The model to use for prediction. Can be:
-                  - Path to a model file
-                  - "latest" to use the most recent version
+                  - None to pick the pretrained "aa" or "dna" model based on the (inferred) data type
+                  - "aa" or "dna" for the pretrained model of that data type
                   - A version string like "v1.0"
+                  - Path to a model file
                   - A pre-loaded LightGBM model
             max_samples: Maximum number of sequence triplets to sample.
                        Controls computation time vs. prediction stability.
@@ -53,22 +54,24 @@ class DifficultyPredictor:
         Raises:
             ValueError: If the model file cannot be found or loaded
         """
-        if self._is_path(model):
-            self.model: "lgb.Booster" = lgb.Booster(model_file=Path(model))
-        elif isinstance(model, str):
+        self.model: "lgb.Booster" = None if model is None else self._load_model(model)
+
+        self._max_samples = max_samples
+        self.seed = seed
+
+    @classmethod
+    def _load_model(cls, model) -> "lgb.Booster":
+        if cls._is_path(model):
+            return lgb.Booster(model_file=Path(model))
+        if isinstance(model, str):
             file_name = model
             if model == "aa":
                 file_name = get_from_config("models", "aa")
             if model == "dna":
                 file_name = get_from_config("models", "dna")
             file_name += ".txt"
-            model_path = ROOT / "models" / file_name
-            self.model: "lgb.Booster" = lgb.Booster(model_file=model_path)
-        else:  # Try to use directly
-            self.model = model
-
-        self._max_samples = max_samples
-        self.seed = seed
+            return lgb.Booster(model_file=ROOT / "models" / file_name)
+        return model  # Try to use directly
 
     def predict(
         self,
@@ -118,13 +121,17 @@ class DifficultyPredictor:
         self._psa_config = {"MAX_PSA_COUNT": max_psa_count}
 
         # extract features
-        feat_df = FeatureExtractor(
+        extractor = FeatureExtractor(
             sequences=_sequences,
             psa_config=self._psa_config,
             track_perf=False,
             data_type=in_type,
             seed=self.seed,
-        ).compute()
+        )
+        feat_df = extractor.compute()
+
+        if self.model is None:
+            self.model = self._load_model(extractor.data_type.lower())
 
         model_feats = self.model.feature_name()
         feat_df = feat_df[model_feats]
@@ -156,7 +163,8 @@ class DifficultyPredictor:
 
         return ROOT / "models" / file_name
 
-    def _is_path(self, input) -> bool:
+    @staticmethod
+    def _is_path(input) -> bool:
         """
         Check if the input is a valid file path.
 

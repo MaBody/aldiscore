@@ -48,22 +48,14 @@ def test_protein_ambiguity_codes_are_accepted(protein_seqs):
     assert isinstance(float(score), float)
 
 
-DNA_SEQS = [
-    "ATGCGTACGTTAGCATCGATCGATCGTAGCTAGCTAGCTAGGCTAGCTAGCTAGCATCG",
-    "ATGCGTACGTTAGCATCGATCGATCGTAGCTAGCTAGCTAGGCTAGCTAGCTAGCTTCG",
-    "ATGCGTACGTTAGCATCGATCGATCGTAGCTAGCTTGCTAGGCTAGCTAGCTAGCATCG",
-    "ATGCGTACGTTAGCATCGATCGATCGTAGCAAGCTAGCTAGGCTAGCTAGCTAGCATCG",
-]
-
-
-def test_dna_ambiguity_codes_are_accepted():
-    score = DifficultyPredictor(model="dna", seed=0).predict(_insert(DNA_SEQS, "NR"), in_type="DNA")
+def test_dna_ambiguity_codes_are_accepted(dna_seqs):
+    score = DifficultyPredictor(model="dna", seed=0).predict(_insert(dna_seqs, "NR"), in_type="DNA")
     assert isinstance(float(score), float)
 
 
-def test_dna_stop_codon_is_rejected():
+def test_dna_stop_codon_is_rejected(dna_seqs):
     with pytest.raises(ValueError, match=r"Invalid characters for DNA"):
-        DifficultyPredictor(model="dna", seed=0).predict(_insert(DNA_SEQS, "*"), in_type="DNA")
+        DifficultyPredictor(model="dna", seed=0).predict(_insert(dna_seqs, "*"), in_type="DNA")
 
 
 def _records(seqs):
@@ -75,27 +67,27 @@ def test_empty_input_reports_sequence_count():
         FeatureExtractor([])
 
 
-def test_too_few_sequences_reports_count():
+def test_too_few_sequences_reports_count(dna_seqs):
     with pytest.raises(ValueError, match=r"Need at least 3 sequences, found 2"):
-        FeatureExtractor(_records(DNA_SEQS[:2]))
+        FeatureExtractor(_records(dna_seqs[:2]))
 
 
-def test_too_few_sequences_only_warns_in_warn_mode(capsys):
-    FeatureExtractor(_records(DNA_SEQS[:2]), validate="warn")
+def test_too_few_sequences_only_warns_in_warn_mode(capsys, dna_seqs):
+    FeatureExtractor(_records(dna_seqs[:2]), validate="warn")
     assert "WARNING: Need at least 3 sequences" in capsys.readouterr().out
 
 
-def test_lowercase_in_type_is_accepted():
-    upper = DifficultyPredictor(model="dna", seed=0).predict(DNA_SEQS, in_type="DNA")
-    lower = DifficultyPredictor(model="dna", seed=0).predict(DNA_SEQS, in_type="dna")
+def test_lowercase_in_type_is_accepted(dna_seqs):
+    upper = DifficultyPredictor(model="dna", seed=0).predict(dna_seqs, in_type="DNA")
+    lower = DifficultyPredictor(model="dna", seed=0).predict(dna_seqs, in_type="dna")
     assert lower == upper
 
 
-def test_unknown_in_type_is_rejected():
+def test_unknown_in_type_is_rejected(dna_seqs):
     with pytest.raises(ValueError, match=r"Unknown data_type 'RNA'"):
-        DifficultyPredictor(model="dna", seed=0).predict(DNA_SEQS, in_type="RNA")
+        DifficultyPredictor(model="dna", seed=0).predict(dna_seqs, in_type="RNA")
 
 
-def test_unknown_in_type_is_rejected_even_in_warn_mode():
+def test_unknown_in_type_is_rejected_even_in_warn_mode(dna_seqs):
     with pytest.raises(ValueError, match=r"Unknown data_type"):
-        FeatureExtractor(_records(DNA_SEQS), data_type="RNA", validate="warn")
+        FeatureExtractor(_records(dna_seqs), data_type="RNA", validate="warn")
