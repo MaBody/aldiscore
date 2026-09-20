@@ -4,7 +4,7 @@ description = "Python library for computing and predicting uncertainty in multip
 readme = {file = "README.md", content-type = "text/markdown"}
 keywords = ["msa", "alignment", "uncertainty", "prediction"]
 authors = [{name = "Mattis Bodynek", email = "mattisbodynek@gmail.com"}]
-version = "1.0.0"
+version = "1.1.0"
 license = "GPL-3.0-or-later"
 classifiers = [
     "Programming Language :: Python :: 3.10",
