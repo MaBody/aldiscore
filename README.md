@@ -3,8 +3,9 @@
 AlDiScore provides two approaches for quantifying multiple sequence alignment (MSA) difficulty:
 
 
-1. **Predictive Scoring**: Predict alignment difficulty from unaligned sequences using ML. Supports both nucleotides and amino-acids sequences. 
+1. **Predictive Scoring**: Predict alignment difficulty from unaligned sequences. Supports both nucleotides and amino-acids sequences. 
 2. **Heuristic Scoring**: Compute dispersion within an ensemble of alternative alignments. Requires the pre-computed MSA ensemble. 
+
 
 ## Setup
 
