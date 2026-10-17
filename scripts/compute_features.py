@@ -3,9 +3,7 @@ from pathlib import Path
 import os
 from Bio import SeqIO
 from aldiscore.prediction.extractor import FeatureExtractor
-from aldiscore.constants.constants import DNA_CHARS, AA_CHARS, GAP_CHAR
 from aldiscore import ROOT
-import numpy as np
 import pandas as pd
 import multiprocessing as mp
 from functools import partial
@@ -14,45 +12,52 @@ import datetime
 _DONE = "DONE"
 _TRACK_PERF = True
 
+# Data type per source; None marks mixed sources (see get_data_types)
+SOURCE_DATA_TYPES = {
+    "bali2dna": "DNA",
+    "treebase_v1": None,
+    "arthropod": "AA",
+    "formatt_homstrad_renamed": "AA",
+    "formatt_sabmark_renamed": "AA",
+    "prefab4": "AA",
+    "bali3": "AA",
+    "ox": "AA",
+    "sabre": "AA",
+}
+
 
 def get_dirs(dir):
     return list(filter(lambda name: os.path.isdir(dir / name), os.listdir(dir)))
 
 
-def infer_data_type(records) -> str:
+def get_data_types(source: str, datasets: list, data_dir: Path) -> dict:
     """
-    Composition heuristic that labelled the v1.0 training data (`is_dna` feature).
-    No longer part of the package; kept here so features stay reproducible,
-    since sources like treebase_v1 mix DNA and AA datasets.
+    Map each dataset of a source to its data type ("DNA" or "AA").
+    Single-type sources are listed in SOURCE_DATA_TYPES. Mixed sources (None)
+    need a data_types.csv with columns `dataset,data_type` in the source directory.
     """
-    ungapped = None
-    for seq in records:
-        ungapped = str(seq.seq).replace(GAP_CHAR, "")[:1000].upper()
-        if len(ungapped) >= 100:
-            break
-    char_counts = pd.Series(list(ungapped)).value_counts()
-    unique_chars = char_counts.index.to_series()
+    if source not in SOURCE_DATA_TYPES:
+        raise KeyError(f"No data type for source {source!r}; add it to SOURCE_DATA_TYPES")
+    data_type = SOURCE_DATA_TYPES[source]
+    if data_type is not None:
+        return {dataset: data_type for dataset in datasets}
 
-    dna_included = np.isin(DNA_CHARS, unique_chars)
-    protein_included = np.isin(AA_CHARS, unique_chars)
-
-    protein_missing = AA_CHARS[~protein_included]
-    missing_counts = pd.Series(0, index=protein_missing)
-    char_counts = pd.concat((char_counts, missing_counts))
-
-    # If all DNA chars are included and their cumulative share is above 90%: DNA!
-    if dna_included.all() & (char_counts[DNA_CHARS].sum() / len(ungapped) >= 0.9):
-        return "DNA"
-    # If the cumulative share of protein chars is above 90%: Protein!
-    elif char_counts[AA_CHARS].sum() / len(ungapped) >= 0.9:
-        return "AA"
-    else:
-        raise AssertionError(
-            "Unknown alphabet detected for string '{}'".format(ungapped)
-        )
+    csv_path = data_dir / source / "data_types.csv"
+    if not csv_path.is_file():
+        raise FileNotFoundError(f"Mixed source {source!r} needs {csv_path}")
+    data_types = pd.read_csv(csv_path, dtype=str).set_index("dataset")["data_type"]
+    missing = sorted(set(datasets) - set(data_types.index))
+    if missing:
+        raise ValueError(f"{csv_path} is missing {len(missing)} datasets, e.g. {missing[:5]}")
+    invalid = sorted(set(data_types[datasets]) - {"DNA", "AA"})
+    if invalid:
+        raise ValueError(f"{csv_path} has invalid data types {invalid}; expected 'DNA' or 'AA'")
+    return data_types[datasets].to_dict()
 
 
-def process_dataset(dataset: str, source: str, data_dir: Path, queue: mp.Queue):
+def process_dataset(
+    dataset: str, source: str, data_dir: Path, data_types: dict, queue: mp.Queue
+):
     track_perf = queue is not None
     feats_dict = {}
     seqs = list(
@@ -61,7 +66,7 @@ def process_dataset(dataset: str, source: str, data_dir: Path, queue: mp.Queue):
     psa_config = {"MAX_PSA_COUNT": 300}
     extractor = FeatureExtractor(
         seqs,
-        data_type=infer_data_type(seqs),
+        data_type=data_types[dataset],
         psa_config=psa_config,
         track_perf=track_perf,
         validate="warn",
@@ -133,6 +138,13 @@ if __name__ == "__main__":
     
     print(f"Computing for sources: {sources}")
 
+    # Resolve all data types up front to fail before any compute starts
+    source_datasets = {source: get_dirs(data_dir / source) for source in sources}
+    source_data_types = {
+        source: get_data_types(source, datasets, data_dir)
+        for source, datasets in source_datasets.items()
+    }
+
     print("Detected CPUs:", mp.cpu_count())
     cpu_counts = [min(100, mp.cpu_count() - 10)] * len(sources)
     
@@ -145,11 +157,15 @@ if __name__ == "__main__":
         mp.Process(target=process_queue, args=(queue,)).start()
 
     for source, cpu_count in zip(sources, cpu_counts):
-        datasets = get_dirs(data_dir / source)
+        datasets = source_datasets[source]
         feats_dict = {}
 
         process_func = partial(
-            process_dataset, data_dir=data_dir, source=source, queue=queue
+            process_dataset,
+            data_dir=data_dir,
+            source=source,
+            data_types=source_data_types[source],
+            queue=queue,
         )
         with manager.Pool(cpu_count) as pool:
             print(f"[SOURCE] {source} (CPUs: {cpu_count})")
