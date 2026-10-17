@@ -57,11 +57,11 @@ The `aldiscore` command line tool supports both heuristic scoring and prediction
 ```shell
 # Predict difficulty for unaligned sequences
 aldiscore predict path/to/sequences.fasta --in-type AA
-aldiscore predict path/to/alignment.fasta # aligned input works too, gaps are removed
-aldiscore predict path/to/sequences.phy --in-format=phylip
+aldiscore predict path/to/alignment.fasta --in-type DNA # aligned input works too, gaps are removed
+aldiscore predict path/to/sequences.phy --in-type AA --in-format=phylip
 
 ```
-Note that it detects by default the datatype (AA or DNA) but you can also specify it manually.
+`--in-type` (`AA` or `DNA`) is required. It selects the pretrained model and the substitution matrix.
 
 ### Heuristic Scoring
 
@@ -93,7 +93,7 @@ from aldiscore.prediction.predictor import DifficultyPredictor
 predictor = DifficultyPredictor(model="aa")
 
 # Predict difficulty for sequences
-score = predictor.predict("path/to/sequences.fasta")
+score = predictor.predict("path/to/sequences.fasta", in_type="AA")
 ```
 
 ### Heuristic Scoring

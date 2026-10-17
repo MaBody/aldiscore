@@ -34,7 +34,7 @@ class Alignment:
 
         Args:
             msa (MultipleSeqAlignment): The input MSA object.
-            data_type (DataTypeEnum, optional): Data type of the sequences. If None, inferred automatically.
+            data_type (DataTypeEnum, optional): Data type of the sequences. None if unknown; only needed for d_phash.
             sort_sequences (bool, optional): If True, sequences are sorted in a stable order.
                 Sequences must be in order to compute dispersion heuristics!
         """
@@ -46,9 +46,6 @@ class Alignment:
         else:
             self.msa = msa
 
-        # If data_type is not provided, infer via heuristic
-        if data_type is None:
-            data_type = utils.infer_data_type(self.msa)
         self.data_type = data_type
 
         # Compute a unique key for the alignment (used in caching intermediate results)

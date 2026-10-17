@@ -1,6 +1,6 @@
 """
 Dataset module for handling collections of unaligned biological sequences.
-Provides a Dataset class for storing, sorting, and inferring data types of sequence records.
+Provides a Dataset class for storing and sorting sequence records.
 """
 
 from Bio.SeqRecord import SeqRecord
@@ -13,9 +13,8 @@ class Dataset:
     """
     Represents a collection of unaligned biological sequences.
 
-    This class stores a list of sequence records, optionally sorts them,
-    and infers the data type if not provided. It also provides access to
-    sequence lengths and the original sorting indices.
+    This class stores a list of sequence records and optionally sorts them.
+    It also provides access to sequence lengths and the original sorting indices.
 
     Attributes
     ----------
@@ -45,7 +44,7 @@ class Dataset:
         records : list[SeqRecord]
             List of unaligned sequence records.
         data_type : DataTypeEnum, optional
-            Type of biological data. If None, inferred automatically.
+            Type of biological data. None if unknown; only needed for d_phash.
         sort_sequences : bool, default=True
             Whether to sort the sequences by a stable order.
         """
@@ -57,9 +56,6 @@ class Dataset:
         else:
             self.records = records
 
-        # If data_type is not provided, infer via heuristic
-        if data_type is None:
-            data_type = utils.infer_data_type(self.records)
         self.data_type = data_type
 
         self._sequence_lengths = [len(seq.seq) for seq in self.records]
