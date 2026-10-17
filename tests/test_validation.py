@@ -1,3 +1,6 @@
+import re
+
+import parasail
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -91,3 +94,22 @@ def test_unknown_in_type_is_rejected(dna_seqs):
 def test_unknown_in_type_is_rejected_even_in_warn_mode(dna_seqs):
     with pytest.raises(ValueError, match=r"Unknown data_type"):
         FeatureExtractor(_records(dna_seqs), data_type="RNA", validate="warn")
+
+
+def test_amino_acids_missing_from_matrix_warn_without_raising(capsys, protein_seqs):
+    score = DifficultyPredictor(model="aa", seed=0).predict(_insert(protein_seqs, "UOJ"), in_type="AA")
+    assert isinstance(float(score), float)
+    out = capsys.readouterr().out
+    assert re.search(r"WARNING: Characters 'J'.*'O'.*'U'.*blosum62.*scored as '\*'", out)
+
+
+def test_ambiguity_codes_in_matrix_do_not_warn(capsys, protein_seqs, dna_seqs):
+    DifficultyPredictor(model="aa", seed=0).predict(_insert(protein_seqs, "XBZ"), in_type="AA")
+    DifficultyPredictor(model="dna", seed=0).predict(_insert(dna_seqs, "URYKMSWBDHVN"), in_type="DNA")
+    assert "WARNING" not in capsys.readouterr().out
+
+
+def test_matrix_coverage_uses_configured_matrix(capsys, dna_seqs):
+    psa_config = {"DNA": {"matrix": parasail.nuc44}}
+    FeatureExtractor(_records(_insert(dna_seqs, "U")), data_type="DNA", psa_config=psa_config)
+    assert re.search(r"WARNING: Characters 'U'.*nuc44", capsys.readouterr().out)

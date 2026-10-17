@@ -128,6 +128,7 @@ For the heuristics, we use our own wrapper classes Alignment, Dataset, and Ensem
 - `Ensemble` contains `list[Alignment]` and `Dataset`
 
 Prediction input is validated against the IUPAC DNA/protein alphabets. Ambiguity codes are allowed. `*` is rejected, `-` and `.` are treated as gaps and removed.
+`U`, `O` and `J` are accepted but have no row in BLOSUM62, so the pairwise alignments score them like `*`. A warning is printed when they occur. All DNA ambiguity codes and `U` are covered by the DNA matrix.
 
 ## Background
 
