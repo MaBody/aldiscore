@@ -64,16 +64,16 @@ def _records(seqs):
 
 def test_empty_input_reports_sequence_count():
     with pytest.raises(ValueError, match=r"Need at least 3 sequences, found 0"):
-        FeatureExtractor([])
+        FeatureExtractor([], data_type="DNA")
 
 
 def test_too_few_sequences_reports_count(dna_seqs):
     with pytest.raises(ValueError, match=r"Need at least 3 sequences, found 2"):
-        FeatureExtractor(_records(dna_seqs[:2]))
+        FeatureExtractor(_records(dna_seqs[:2]), data_type="DNA")
 
 
 def test_too_few_sequences_only_warns_in_warn_mode(capsys, dna_seqs):
-    FeatureExtractor(_records(dna_seqs[:2]), validate="warn")
+    FeatureExtractor(_records(dna_seqs[:2]), data_type="DNA", validate="warn")
     assert "WARNING: Need at least 3 sequences" in capsys.readouterr().out
 
 

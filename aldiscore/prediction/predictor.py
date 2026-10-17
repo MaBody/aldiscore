@@ -22,7 +22,7 @@ class DifficultyPredictor:
     The predictor can:
     1. Load pre-trained models from files or use custom models
     2. Process sequences in various input formats (FASTA files, strings, SeqRecords)
-    3. Handle both DNA and protein sequences
+    3. Handle both DNA and protein sequences (the caller specifies which)
     4. Optionally remove gaps from input sequences
 
     Attributes:
@@ -42,7 +42,7 @@ class DifficultyPredictor:
 
         Args:
             model: The model to use for prediction. Can be:
-                  - None to pick the pretrained "aa" or "dna" model based on the (inferred) data type
+                  - None to pick the pretrained "aa" or "dna" model based on `in_type` in `predict`
                   - "aa" or "dna" for the pretrained model of that data type
                   - A version string like "v1.0"
                   - Path to a model file
@@ -76,16 +76,16 @@ class DifficultyPredictor:
     def predict(
         self,
         sequences: Union[str, Path, List[SeqRecord], List[str]],
+        in_type: Literal["DNA", "AA"],
         in_format: str = "fasta",
-        in_type: Literal["DNA", "AA", "auto"] = "auto",
     ) -> float:
         """
         Predict alignment difficulty for a set of sequences.
 
         Args:
             sequences: Input sequences, either a path or BioPython objects.
+            in_type: Type of sequences - "DNA" or "AA" (case-insensitive)
             in_format: File format if sequences is a Path (e.g., "fasta")
-            in_type: Type of sequences - "DNA", "AA" or "auto" for detection
 
         Returns:
             float: Predicted difficulty score

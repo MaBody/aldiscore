@@ -3,7 +3,9 @@ from pathlib import Path
 import os
 from Bio import SeqIO
 from aldiscore.prediction.extractor import FeatureExtractor
+from aldiscore.constants.constants import DNA_CHARS, AA_CHARS, GAP_CHAR
 from aldiscore import ROOT
+import numpy as np
 import pandas as pd
 import multiprocessing as mp
 from functools import partial
@@ -17,6 +19,39 @@ def get_dirs(dir):
     return list(filter(lambda name: os.path.isdir(dir / name), os.listdir(dir)))
 
 
+def infer_data_type(records) -> str:
+    """
+    Composition heuristic that labelled the v1.0 training data (`is_dna` feature).
+    No longer part of the package; kept here so features stay reproducible,
+    since sources like treebase_v1 mix DNA and AA datasets.
+    """
+    ungapped = None
+    for seq in records:
+        ungapped = str(seq.seq).replace(GAP_CHAR, "")[:1000].upper()
+        if len(ungapped) >= 100:
+            break
+    char_counts = pd.Series(list(ungapped)).value_counts()
+    unique_chars = char_counts.index.to_series()
+
+    dna_included = np.isin(DNA_CHARS, unique_chars)
+    protein_included = np.isin(AA_CHARS, unique_chars)
+
+    protein_missing = AA_CHARS[~protein_included]
+    missing_counts = pd.Series(0, index=protein_missing)
+    char_counts = pd.concat((char_counts, missing_counts))
+
+    # If all DNA chars are included and their cumulative share is above 90%: DNA!
+    if dna_included.all() & (char_counts[DNA_CHARS].sum() / len(ungapped) >= 0.9):
+        return "DNA"
+    # If the cumulative share of protein chars is above 90%: Protein!
+    elif char_counts[AA_CHARS].sum() / len(ungapped) >= 0.9:
+        return "AA"
+    else:
+        raise AssertionError(
+            "Unknown alphabet detected for string '{}'".format(ungapped)
+        )
+
+
 def process_dataset(dataset: str, source: str, data_dir: Path, queue: mp.Queue):
     track_perf = queue is not None
     feats_dict = {}
@@ -25,7 +60,11 @@ def process_dataset(dataset: str, source: str, data_dir: Path, queue: mp.Queue):
     )
     psa_config = {"MAX_PSA_COUNT": 300}
     extractor = FeatureExtractor(
-        seqs, psa_config=psa_config, track_perf=track_perf, validate="warn"
+        seqs,
+        data_type=infer_data_type(seqs),
+        psa_config=psa_config,
+        track_perf=track_perf,
+        validate="warn",
     )
     feats = extractor.compute()
 

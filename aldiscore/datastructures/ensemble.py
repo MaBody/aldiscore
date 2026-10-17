@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Union
 from aldiscore.datastructures.alignment import Alignment
 from aldiscore.datastructures.dataset import Dataset
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 
 class Ensemble:
@@ -53,12 +53,11 @@ class Ensemble:
         cls,
         ensemble_dir: Union[str, "Path"],
         in_format: str = "fasta",
-        in_type: Literal["auto", "DNA", "AA"] = "auto",
+        in_type: Optional[Literal["DNA", "AA"]] = None,
     ):
 
         from Bio.AlignIO import read
 
-        in_type = None if in_type == "auto" else in_type
         alignments = []
         for msa_file in sorted(os.listdir(ensemble_dir)):
             msa = read(ensemble_dir / msa_file, in_format)

@@ -103,7 +103,9 @@ def sequence_perceptual_hash(
     elif data_type == DataTypeEnum.AA:
         numeric_seq = pd.Series(sequence).map(lambda x: AA_CHAR_MAP[x]).to_numpy()
     else:
-        raise ValueError(f"Data type not recognized: {data_type}")
+        raise ValueError(
+            f"Data type not recognized: {data_type!r}; d_phash needs data_type 'DNA' or 'AA'"
+        )
     numeric_seq_2d = np.resize(numeric_seq, (side_length, side_length))
 
     return _perceptual_hash(numeric_seq_2d, size)
@@ -142,7 +144,9 @@ def msa_perceptual_hash(
     elif data_type == DataTypeEnum.AA:
         numeric_msa = pd.DataFrame(msa).map(lambda x: AA_CHAR_MAP[x]).to_numpy()
     else:
-        raise ValueError(f"Data type not recognized: {data_type}")
+        raise ValueError(
+            f"Data type not recognized: {data_type!r}; d_phash needs data_type 'DNA' or 'AA'"
+        )
     return _perceptual_hash(numeric_msa, size)
 
 

@@ -12,7 +12,7 @@ Usage:
         aldiscore heuristic <in-dir> [--method] [--out-format] [--in-format]
 
     Prediction mode:
-        aldiscore predict <in-path> [--model] [--seed] [--max-samples] [--in-format] [--in-type]
+        aldiscore predict <in-path> --in-type {DNA,AA} [--model] [--seed] [--max-samples] [--in-format]
 """
 
 import argparse
@@ -80,8 +80,8 @@ def handle_heuristic_mode(in_dir, in_format, method, out_format):
 
     from aldiscore.datastructures.ensemble import Ensemble
 
-    # Load data (use placeholder value for in_type, not relevant for heuristics used below)
-    ensemble = Ensemble.load(ensemble_dir=in_dir, in_format=in_format, in_type="DNA")
+    # Data type is only needed for d_phash, which is not exposed here
+    ensemble = Ensemble.load(ensemble_dir=in_dir, in_format=in_format)
 
     if mode == "pairwise":
 
@@ -114,7 +114,7 @@ def handle_predict_mode(
 
     :param in_path: Path to the sequence file.
     :param in_format: File format of the sequences.
-    :param in_type: Input data type (DNA, AA, auto).
+    :param in_type: Input data type (DNA, AA).
     :param max_samples: Upper bound on number of sequence triplets.
     :param model: The model version to use for prediction.
     :param seed: The random seed for prediction.
@@ -232,10 +232,10 @@ def main():
     )
     predict_parser.add_argument(
         "--in-type",
-        type=str,
-        default="auto",
-        choices=["auto", "DNA", "AA"],
-        help="Input data type. Choose from {'auto', 'DNA', 'AA'}. If set to 'auto', we use a heuristic to infer. Defaults to 'auto'.",
+        type=str.upper,
+        required=True,
+        choices=["DNA", "AA"],
+        help="Input data type, either 'DNA' or 'AA' (case-insensitive). Required.",
     )
     predict_parser.add_argument(
         "--max-samples",
@@ -247,7 +247,7 @@ def main():
         "--model",
         type=str,
         default=None,
-        help="Indicates the pretrained model version. Following the format 'vX.Y'. Defaults to the latest model for the (inferred) input data type.",
+        help="Indicates the pretrained model version. Following the format 'vX.Y'. Defaults to the latest model for the given --in-type.",
     )
     predict_parser.add_argument(
         "--seed",

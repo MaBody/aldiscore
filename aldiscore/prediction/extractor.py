@@ -6,7 +6,6 @@ from Bio.SeqRecord import SeqRecord
 from abc import ABC
 import itertools as it
 from aldiscore.enums.enums import StringEnum
-from aldiscore.datastructures.utils import infer_data_type
 from aldiscore.constants.constants import (
     GAP_CHAR,
     GAP_CODE,
@@ -161,9 +160,9 @@ class FeatureExtractor(BaseFeatureExtractor):
     def __init__(
         self,
         sequences: List[SeqRecord],
+        data_type: Literal["DNA", "AA"],
         psa_config: dict = None,
         track_perf: bool = False,
-        data_type: Literal["DNA", "AA", "auto"] = "auto",
         validate: Literal["warn", "error"] = "error",
         seed: int = 0,
     ):
@@ -172,16 +171,16 @@ class FeatureExtractor(BaseFeatureExtractor):
 
         Args:
             sequences: List of BioPython SeqRecord objects containing the sequences
+            data_type: Type of sequences - "DNA" or "AA" (case-insensitive)
             psa_config: Configuration for pairwise sequence alignment
                        Contains alignment parameters and sampling settings
             track_perf: Whether to track computation time for each feature
-            data_type: Type of sequences - "DNA", "AA" or "auto" for automatic detection
             validate: How to handle validation errors - "warn" or "error"
             seed: Random seed for reproducible sampling
 
         Raises:
             ValueError: If validation fails and validate="error", or if data_type
-                is not one of "DNA", "AA", "auto"
+                is not one of "DNA", "AA"
         """
         super().__init__(sequences, track_perf)
 
@@ -225,17 +224,13 @@ class FeatureExtractor(BaseFeatureExtractor):
 
     def _resolve_data_type(self, data_type: str) -> str:
         """
-        Normalise the data type to "DNA" or "AA", inferring it for "auto".
+        Normalise the data type to "DNA" or "AA".
         An unknown value is a caller error and always raises, regardless of
         the validation policy.
         """
-        data_type = data_type.upper()
-        if data_type == "AUTO":
-            data_type = str(infer_data_type(self._sequences))
+        data_type = str(data_type).upper()
         if data_type not in ("DNA", "AA"):
-            raise ValueError(
-                f"Unknown data_type {data_type!r}; expected 'DNA', 'AA' or 'auto'"
-            )
+            raise ValueError(f"Unknown data_type {data_type!r}; expected 'DNA' or 'AA'")
         return data_type
 
     def _check_alphabet(self):
