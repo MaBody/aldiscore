@@ -23,6 +23,11 @@ from functools import partial
 
 _FEATURE_FLAG = "_is_feature"
 
+# parasail scores characters missing from a matrix with the matrix's last row.
+# That row is the stop codon "*" in BLOSUM, PAM and NUC.4.4, but in dnafull
+# it is a real "U" row (scored like "T").
+_MATRIX_LAST_SYMBOL = {"dnafull": "U"}
+
 # if TYPE_CHECKING:
 
 
@@ -192,6 +197,7 @@ class FeatureExtractor(BaseFeatureExtractor):
         self._check_alphabet()
 
         self._psa_config = self._init_psa_config(psa_config)
+        self._check_matrix_coverage()
 
         self._seed = seed
 
@@ -208,6 +214,10 @@ class FeatureExtractor(BaseFeatureExtractor):
         """Apply the validation policy: raise on "error", print on "warn"."""
         if self._validate == "error":
             raise ValueError(msg)
+        self._warn(msg)
+
+    def _warn(self, msg: str):
+        """Print a warning, independent of the validation policy."""
         print("WARNING: " + msg)
 
     def _check_structure(self):
@@ -258,6 +268,44 @@ class FeatureExtractor(BaseFeatureExtractor):
                 f"Invalid characters for {data_type} data: "
                 f"{sorted(invalid_chars)} in sequences {invalid_ids[:5]}"
                 + (f" (+{len(invalid_ids) - 5} more)" if len(invalid_ids) > 5 else "")
+            )
+
+    def _check_matrix_coverage(self):
+        """
+        Warn about characters that the substitution matrix has no row for.
+        parasail silently scores them with the matrix's last row, e.g. "U",
+        "O" and "J" are scored as the stop codon "*" in BLOSUM62.
+        """
+        data_type = self._cache[self._DTYPE]
+        matrix = self._psa_config[data_type]["matrix"]
+        name = matrix.name.decode() if isinstance(matrix.name, bytes) else matrix.name
+        last_symbol = _MATRIX_LAST_SYMBOL.get(name, "*")
+        mapper = matrix.mapper
+        fallback_idx = matrix.size - 1
+
+        def falls_back(char):
+            if char in (GAP_CHAR, last_symbol):
+                return False
+            return ord(char) >= len(mapper) or mapper[ord(char)] == fallback_idx
+
+        counts = Counter()
+        affected_ids = []
+        for seq in self._sequences:
+            seq_counts = Counter(str(seq.seq).upper())
+            fallback = {c: n for c, n in seq_counts.items() if falls_back(c)}
+            if fallback:
+                counts.update(fallback)
+                affected_ids.append(seq.id)
+        if counts:
+            chars = ", ".join(f"{c!r} ({counts[c]}x)" for c in sorted(counts))
+            self._warn(
+                f"Characters {chars} are not in the {name} substitution matrix "
+                f"and are scored as {last_symbol!r}, in sequences {affected_ids[:5]}"
+                + (
+                    f" (+{len(affected_ids) - 5} more)"
+                    if len(affected_ids) > 5
+                    else ""
+                )
             )
 
     def _init_psa_config(self, psa_config: dict) -> Dict[str, Any]:
